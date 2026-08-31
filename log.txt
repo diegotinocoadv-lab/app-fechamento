@@ -1,0 +1,64 @@
+﻿
+> dev
+> vite dev
+
+npm.cmd : [33mThe plugin "vite-tsconfig-paths" is detected. Vite now supports tsconfig paths resolution natively via 
+the [1mresolve.tsconfigPaths[22m option. You can remove the plugin and set [1mresolve.tsconfigPaths: true[22m in 
+your Vite config instead.[39m
+No C:\Users\Diego-Note\Documents\Default Project\iniciar.ps1:3 caractere:1
++ & "C:\Program Files\nodejs\npm.cmd" run dev *>&1 | Out-File -FilePath ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([33mThe plugin...g instead.[39m:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[2m21:13:04[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m Re-optimizing dependencies because vite config has changed
+
+  [32m[1mVITE[22m v8.1.5[39m  [2mready in [0m[1m13075[22m[2m[0m ms[22m
+
+  [32mÔ×£[39m  [1mLocal[22m:   [36mhttp://localhost:[1m8080[22m/[39m
+  [32mÔ×£[39m  [1mNetwork[22m: [36mhttp://192.168.15.16:[1m8080[22m/[39m
+[2m[32m  Ô×£[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[2m21:13:06[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [optimizer] bundling dependencies...
+[2m21:13:43[22m [36m[1m[vite][22m[39m [34m[2m(ssr)[22m[39m connected.
+[2m21:15:22[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [33mwarning: 
+C:/Users/Diego-Note/Documents/Default Project/src/lib/fechamento.functions.ts:24:33 createServerFn().inputValidator() 
+is deprecated. Use createServerFn().validator() instead.[39m
+  Plugin: [35mtanstack-start-core::server-fn:client[39m
+  File: [36mC:/Users/Diego-Note/Documents/Default Project/src/lib/fechamento.functions.ts[39m
+[2m21:15:22[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [33mwarning: 
+C:/Users/Diego-Note/Documents/Default Project/src/lib/usuarios.functions.ts:61:29 createServerFn().inputValidator() is 
+deprecated. Use createServerFn().validator() instead.[39m
+  Plugin: [35mtanstack-start-core::server-fn:client[39m
+  File: [36mC:/Users/Diego-Note/Documents/Default Project/src/lib/usuarios.functions.ts[39m
+[2m21:15:22[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [33mwarning: 
+C:/Users/Diego-Note/Documents/Default Project/src/lib/usuarios.functions.ts:93:29 createServerFn().inputValidator() is 
+deprecated. Use createServerFn().validator() instead.[39m
+  Plugin: [35mtanstack-start-core::server-fn:client[39m
+  File: [36mC:/Users/Diego-Note/Documents/Default Project/src/lib/usuarios.functions.ts[39m
+[2m21:15:22[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [33mwarning: 
+C:/Users/Diego-Note/Documents/Default Project/src/lib/usuarios.functions.ts:114:31 createServerFn().inputValidator() 
+is deprecated. Use createServerFn().validator() instead.[39m
+  Plugin: [35mtanstack-start-core::server-fn:client[39m
+  File: [36mC:/Users/Diego-Note/Documents/Default Project/src/lib/usuarios.functions.ts[39m
+[2m21:15:23[22m [33m[1m[vite][22m[39m [33m[2m(ssr)[22m[39m [33mwarning: 
+C:/Users/Diego-Note/Documents/Default Project/src/lib/usuarios.functions.ts?tss-serverfn-split:61:29 
+createServerFn().inputValidator() is deprecated. Use createServerFn().validator() instead.[39m
+  Plugin: [35mtanstack-start-core::server-fn:ssr[39m
+  File: [36mC:/Users/Diego-Note/Documents/Default Project/src/lib/usuarios.functions.ts?tss-serverfn-split[39m
+[2m21:15:23[22m [33m[1m[vite][22m[39m [33m[2m(ssr)[22m[39m [33mwarning: 
+C:/Users/Diego-Note/Documents/Default Project/src/lib/usuarios.functions.ts?tss-serverfn-split:93:29 
+createServerFn().inputValidator() is deprecated. Use createServerFn().validator() instead.[39m
+  Plugin: [35mtanstack-start-core::server-fn:ssr[39m
+  File: [36mC:/Users/Diego-Note/Documents/Default Project/src/lib/usuarios.functions.ts?tss-serverfn-split[39m
+[2m21:15:23[22m [33m[1m[vite][22m[39m [33m[2m(ssr)[22m[39m [33mwarning: 
+C:/Users/Diego-Note/Documents/Default Project/src/lib/usuarios.functions.ts?tss-serverfn-split:114:31 
+createServerFn().inputValidator() is deprecated. Use createServerFn().validator() instead.[39m
+  Plugin: [35mtanstack-start-core::server-fn:ssr[39m
+  File: [36mC:/Users/Diego-Note/Documents/Default Project/src/lib/usuarios.functions.ts?tss-serverfn-split[39m
+[2m21:17:24[22m [33m[1m[vite][22m[39m [33m[2m(ssr)[22m[39m [33mwarning: 
+C:/Users/Diego-Note/Documents/Default Project/src/lib/fechamento.functions.ts?tss-serverfn-split:24:33 
+createServerFn().inputValidator() is deprecated. Use createServerFn().validator() instead.[39m
+  Plugin: [35mtanstack-start-core::server-fn:ssr[39m
+  File: [36mC:/Users/Diego-Note/Documents/Default Project/src/lib/fechamento.functions.ts?tss-serverfn-split[39m
+[Supabase] Missing Supabase environment variable(s): SUPABASE_SERVICE_ROLE_KEY. Connect Supabase in Lovable Cloud.
+^C
