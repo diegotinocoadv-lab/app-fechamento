@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { AppNav } from "@/components/AppNav";
 import { IMPORT_STORAGE_KEY, brlSinal, classeDiferenca, type FechamentoImportado } from "@/lib/fechamento-campos";
 import { salvarFechamento } from "@/lib/fechamento.functions";
+import { saldoCofre } from "@/lib/coletas.functions";
+import { meuAcesso } from "@/lib/usuarios.functions";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn as useServerFnQuery } from "@tanstack/react-start";
 
 
 export const Route = createFileRoute("/_authenticated/fechamento")({
@@ -67,29 +71,22 @@ const bolaoVazio = (): Bolao => ({ concurso: "", valor: "", taxa: "", quant: "" 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-/** Cor RGB da diferença no PDF: verde positivo, vermelho negativo, neutro zero. */
 const corDiferencaPdf = (n: number): [number, number, number] =>
   Math.abs(n) < 0.005 ? [30, 30, 30] : n > 0 ? [5, 150, 105] : [220, 38, 38];
 
-
-/**
- * Configurações centrais de layout do PDF A4.
- * Ajuste apenas estes valores para mudar margens, escala e espaçamentos.
- * @type {object}
- */
 const PDF_CONFIG = {
-  margin: 32, // margem (pt) em torno da página
-  lineSaldo: 18, // altura de cada linha das seções de saldo
-  lineValor: 24, // altura de cada linha da tabela de valores
-  gapTopTitle: 18, // altura inicial do título "Loterica..."
-  gapTitle2Title: 22, // espaço entre título 1 e "Fechamento de Caixa"
-  gapTitle2Meta: 26, // espaço entre "Fechamento" e a linha data/funcionário
-  gapMetaSaldo: 28, // espaço antes dos saldos
-  gapSaldoValor: 34, // espaço entre os saldos e a tabela de valores
-  gapValorRelatorio: 10, // espaço entre valores e relatório
-  gapRelatorioTotal: 26, // espaço entre relatório e total
-  gapTotalDiferenca: 22, // espaço entre total e diferença
-  gapBottom: 6, // margem inferior de folga
+  margin: 32,
+  lineSaldo: 18,
+  lineValor: 24,
+  gapTopTitle: 18,
+  gapTitle2Title: 22,
+  gapTitle2Meta: 26,
+  gapMetaSaldo: 28,
+  gapSaldoValor: 34,
+  gapValorRelatorio: 10,
+  gapRelatorioTotal: 26,
+  gapTotalDiferenca: 22,
+  gapBottom: 6,
 } as const;
 
 function Fechamento() {
@@ -108,7 +105,19 @@ function Fechamento() {
   );
   const salvarFechamentoFn = useServerFn(salvarFechamento);
 
-  // Aplica um fechamento vindo da importação por imagem (prévia interativa).
+  const acessoFn = useServerFnQuery(meuAcesso);
+  const { data: acesso } = useQuery({
+    queryKey: ["meu-acesso-fechamento"],
+    queryFn: () => acessoFn({}),
+  });
+
+  const saldoCofreFn = useServerFnQuery(saldoCofre);
+  const { data: dadosCofre } = useQuery({
+    queryKey: ["saldo-cofre"],
+    queryFn: () => saldoCofreFn({}),
+    enabled: Boolean(acesso?.admin),
+  });
+
   useEffect(() => {
     const bruto = sessionStorage.getItem(IMPORT_STORAGE_KEY);
     if (!bruto) return;
@@ -133,7 +142,6 @@ function Fechamento() {
       /* ignora conteúdo inválido */
     }
   }, []);
-
 
   const num = (v: string) => Number(v.replace(",", ".")) || 0;
 
@@ -164,7 +172,6 @@ function Fechamento() {
   const diferenca = total - num(relatorio);
   const diferencaSaldo = totalFinal - totalInicial;
 
-
   const [salvando, setSalvando] = useState(false);
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -182,21 +189,19 @@ function Fechamento() {
     const availH = pageH - margin * 2;
     const availW = pageW - margin * 2;
 
-    // Altura total do conteúdo na escala 1, derivada das configurações centrais
     const baseHeight =
       PDF_CONFIG.gapTopTitle +
       PDF_CONFIG.gapTitle2Title +
       PDF_CONFIG.gapTitle2Meta +
       PDF_CONFIG.gapMetaSaldo +
-      lineSaldo * (SALDO_ITENS.length + 1) + // itens + TOTAL
+      lineSaldo * (SALDO_ITENS.length + 1) +
       PDF_CONFIG.gapSaldoValor +
       lineValor * VALOR_CAMPOS.length +
       PDF_CONFIG.gapValorRelatorio +
       PDF_CONFIG.gapRelatorioTotal +
-      PDF_CONFIG.gapTotalDiferenca * 2 + // diferença de saldo + diferença do caixa
+      PDF_CONFIG.gapTotalDiferenca * 2 +
       PDF_CONFIG.gapBottom;
 
-    // Escala para caber sempre em uma única página
     const s = Math.min(1, availH / baseHeight);
     const colMid = margin + availW / 2 + 8;
     const rightIn = margin + availW / 2 - 16;
@@ -268,9 +273,6 @@ function Fechamento() {
     doc.text(brlSinal(diferenca), rightEnd, y, { align: "right" });
     doc.setTextColor(30, 30, 30);
 
-
-
-    // Segunda página: controle de bolões
     const preenchidos = boloes.filter(
       (b) => b.concurso || b.valor || b.taxa || b.quant,
     );
@@ -311,7 +313,6 @@ function Fechamento() {
       doc.text(String(totalQuant || ""), rightEnd, by, { align: "right" });
     }
 
-
     return doc;
   };
 
@@ -334,7 +335,7 @@ function Fechamento() {
           });
           return;
         } catch {
-          // usuário cancelou ou compartilhamento indisponível: baixa o arquivo
+          // cancelou
         }
       }
       const url = URL.createObjectURL(blob);
@@ -388,7 +389,6 @@ function Fechamento() {
     }
   };
 
-
   const limpar = () => {
     setFuncionario("");
     setRelatorio("");
@@ -402,7 +402,6 @@ function Fechamento() {
 
   const setBolao = (idx: number, campo: keyof Bolao, v: string) =>
     setBoloes((bs) => bs.map((b, i) => (i === idx ? { ...b, [campo]: v } : b)));
-
 
   const inputCls =
     "h-8 w-28 rounded-md border border-input bg-background px-3 text-right text-sm text-foreground outline-none focus:ring-2 focus:ring-ring";
@@ -446,6 +445,36 @@ function Fechamento() {
     <main className="min-h-screen bg-background px-4 py-6">
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
         <AppNav />
+
+        {acesso?.admin && dadosCofre && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Depósitos (conta 043)
+              </p>
+              <p className="mt-1 text-lg font-bold text-foreground">
+                {brl(dadosCofre.totalDepositos)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Coletas (carro forte)
+              </p>
+              <p className="mt-1 text-lg font-bold text-foreground">
+                {brl(dadosCofre.totalColetado)}
+              </p>
+            </div>
+            <div className={`rounded-lg border p-3 shadow-sm ${dadosCofre.saldo >= 0 ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Saldo no cofre
+              </p>
+              <p className={`mt-1 text-lg font-bold ${dadosCofre.saldo >= 0 ? "text-green-700" : "text-red-700"}`}>
+                {brl(dadosCofre.saldo)}
+              </p>
+            </div>
+          </div>
+        )}
+
         <header className="text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">
             Lotérica Brasil da Sorte
@@ -617,10 +646,7 @@ function Fechamento() {
               </tfoot>
             </table>
           </div>
-        
         </section>
-
-
 
         <div className="flex justify-end gap-2">
           <button
@@ -668,8 +694,6 @@ function Fechamento() {
             {erro}
           </p>
         )}
-
-
       </div>
     </main>
   );
