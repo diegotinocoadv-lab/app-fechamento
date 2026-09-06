@@ -45,13 +45,22 @@ export function AppNav() {
           Histórico
         </Link>
         {data?.admin && (
-          <Link
-            to="/usuarios"
-            className={linkCls}
-            activeProps={{ className: `${linkCls} bg-secondary text-foreground` }}
-          >
-            Usuários
-          </Link>
+          <>
+            <Link
+              to="/coletas"
+              className={linkCls}
+              activeProps={{ className: `${linkCls} bg-secondary text-foreground` }}
+            >
+              Coletas
+            </Link>
+            <Link
+              to="/usuarios"
+              className={linkCls}
+              activeProps={{ className: `${linkCls} bg-secondary text-foreground` }}
+            >
+              Usuários
+            </Link>
+          </>
         )}
       </div>
       <div className="flex items-center gap-2 px-2">
