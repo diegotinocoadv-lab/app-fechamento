@@ -34,3 +34,4 @@ dist-ssr
 # Deploy VPN
 .env.production
 deploy/certbot/
+.env
