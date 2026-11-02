@@ -19,6 +19,7 @@ import {
 import { controleBoloes } from "@/lib/controle-boloes.functions";
 import { listarEstoqueBoloes } from "@/lib/boloes.functions";
 import { buscarProximoConcurso } from "@/lib/caixa-loterias.functions";
+import { listarBoloesRadarlot, type BolaoRadarlot } from "@/lib/radarlot.functions";
 import {
   ajustarCotasEstoque,
   criarEstoque,
@@ -117,6 +118,9 @@ function ControleBoloes() {
   const [novoModeloId, setNovoModeloId] = useState("");
   const [novoConflito, setNovoConflito] = useState<{ id: string; cotas: number } | null>(null);
   const [novoConcursoBuscando, setNovoConcursoBuscando] = useState(false);
+  const [radarAberto, setRadarAberto] = useState(false);
+  const [radarBusca, setRadarBusca] = useState("");
+  const [radarOrigem, setRadarOrigem] = useState<BolaoRadarlot | null>(null);
 
   const [cotasLinha, setCotasLinha] = useState<Linha | null>(null);
   const [cotasTotal, setCotasTotal] = useState("");
@@ -186,6 +190,25 @@ function ControleBoloes() {
 
   // Próximo concurso oficial da Caixa para preencher o cadastro sozinho.
   const proximoConcursoFn = useServerFn(buscarProximoConcurso);
+
+  // Bolões à venda no RadarLot (somente leitura), para importar no cadastro.
+  const radarFn = useServerFn(listarBoloesRadarlot);
+  const radarQ = useQuery({
+    queryKey: ["radarlot-boloes"],
+    queryFn: () => radarFn({ data: {} }),
+    enabled: admin && radarAberto,
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const radarBoloes = useMemo(() => {
+    const todos = radarQ.data?.ok ? radarQ.data.boloes : [];
+    const t = radarBusca.trim().toLowerCase();
+    if (!t) return todos;
+    return todos.filter((b) =>
+      `${b.modalidadeNome} ${b.concurso} ${b.codigo} ${b.loterica}`.toLowerCase().includes(t),
+    );
+  }, [radarQ.data, radarBusca]);
 
   const relatorioQ = useQuery({
     queryKey: ["relatorio-vendas-boloes", de, ate, filtroOperador],
@@ -287,6 +310,7 @@ function ControleBoloes() {
     setNovoModalidade(id);
     setNovoModeloId("");
     setNovoConflito(null);
+    setRadarOrigem(null);
     const mod = MODALIDADES_LOTERIA.find((m) => m.id === id) ?? null;
     if (!mod) {
       setNovoNome("");
@@ -308,12 +332,35 @@ function ControleBoloes() {
   const aplicarModelo = (id: string) => {
     setNovoModeloId(id);
     setNovoConflito(null);
+    setRadarOrigem(null);
     const m = (modelosQ.data?.boloes ?? []).find((x) => x.id === id);
     if (!m) return;
     setNovoModalidade("");
     setNovoNome(m.concurso);
     setNovoValor(m.valorCota ? String(m.valorCota).replace(".", ",") : "");
     setNovoTaxa(m.taxa ? String(m.taxa).replace(".", ",") : "");
+  };
+
+  // Preenche o cadastro com um bolão do RadarLot. O estoque local só muda
+  // quando o administrador confirma em "Criar bolão".
+  const aplicarRadarlot = (b: BolaoRadarlot) => {
+    const mod = MODALIDADES_LOTERIA.find((m) => m.id === b.modalidadeId) ?? null;
+    // A data oficial vem do RadarLot. A modalidade só é aplicada quando ela
+    // bate com o dia do sorteio; senão a validação do cadastro travaria
+    // (ex.: sorteio especial em dia diferente) e o nome continua preenchido.
+    const dataCompativel = !mod || !b.dataSorteio || !validarDataSorteio(mod, b.dataSorteio);
+    setNovoModalidade(dataCompativel && mod ? mod.id : "");
+    setNovoModeloId("");
+    setNovoNome(mod?.nome ?? b.modalidadeNome);
+    setNovoConcurso(b.concurso);
+    setNovoData(b.dataSorteio || proximaDataSorteioISO(mod, hojeSp()));
+    setNovoValor(b.valorSemTarifa > 0 ? String(b.valorSemTarifa).replace(".", ",") : "");
+    setNovoTaxa(b.taxa > 0 ? String(b.taxa).replace(".", ",") : "");
+    setNovoCotas(b.totalCotas > 0 ? String(b.totalCotas) : "");
+    setNovoObs(`RadarLot ${b.codigo}${b.nomeEspecial ? ` · ${b.nomeEspecial}` : ""}`);
+    setNovoConflito(null);
+    setRadarOrigem(b);
+    setRadarAberto(false);
   };
 
   const criarMut = useMutation({
@@ -369,6 +416,8 @@ function ControleBoloes() {
         setNovoAberto(false);
         setNovoConflito(null);
         setNovoModeloId("");
+        setRadarOrigem(null);
+        setRadarAberto(false);
         setNovoNome("");
         setNovoConcurso("");
         setNovoValor("");
@@ -532,7 +581,10 @@ function ControleBoloes() {
           {admin && (
             <button
               type="button"
-              onClick={() => setNovoAberto(true)}
+              onClick={() => {
+                setRadarOrigem(null);
+                setNovoAberto(true);
+              }}
               className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               Novo bolão
@@ -1002,6 +1054,29 @@ function ControleBoloes() {
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-xl">
             <h3 className="text-base font-semibold text-foreground">Novo bolão</h3>
+            <div className="mt-3 flex items-start justify-between gap-3 rounded-md border border-dashed border-border px-3 py-2">
+              <div>
+                <p className="text-xs font-medium text-foreground">Importar do RadarLot</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Preenche modalidade, concurso, data, valor e cotas a partir do bolão de lá.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRadarAberto(true)}
+                className="h-8 shrink-0 rounded-md border border-input bg-background px-3 text-xs font-medium text-foreground hover:bg-accent"
+              >
+                Buscar
+              </button>
+            </div>
+            {radarOrigem && (
+              <p className="mt-2 rounded-md bg-muted/50 px-3 py-2 text-[11px] text-muted-foreground">
+                Importado do RadarLot (código …{radarOrigem.codigo.slice(-6)}). O bolão tem{" "}
+                {radarOrigem.totalCotas} cota(s) e lá restam {radarOrigem.cotasDisponiveis}. Entram
+                as {radarOrigem.totalCotas} no seu estoque; as vendas feitas aqui passam a ser
+                contadas neste sistema.
+              </p>
+            )}
             <label className="mt-3 block text-xs text-muted-foreground">
               Usar um modelo já cadastrado (opcional)
               <select
@@ -1166,6 +1241,7 @@ function ControleBoloes() {
                 onClick={() => {
                   setNovoAberto(false);
                   setNovoConflito(null);
+                  setRadarOrigem(null);
                 }}
                 className="h-9 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground hover:bg-accent"
               >
@@ -1186,6 +1262,94 @@ function ControleBoloes() {
               </button>
             </div>
           </div>
+
+          {radarAberto && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4">
+              <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-xl border border-border bg-card p-5 shadow-xl">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-semibold text-foreground">Bolões no RadarLot</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Só os que ainda estão à venda. Nada é alterado lá.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRadarAberto(false)}
+                    className="h-8 shrink-0 rounded-md border border-input bg-background px-3 text-xs font-medium text-foreground hover:bg-accent"
+                  >
+                    Fechar
+                  </button>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <input
+                    type="text"
+                    value={radarBusca}
+                    onChange={(e) => setRadarBusca(e.target.value)}
+                    placeholder="Filtrar por modalidade, concurso ou código"
+                    className={`${input} w-full`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void radarQ.refetch()}
+                    disabled={radarQ.isFetching}
+                    className="h-9 shrink-0 rounded-md border border-input bg-background px-3 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+                  >
+                    {radarQ.isFetching ? "..." : "Atualizar"}
+                  </button>
+                </div>
+                <div className="mt-3 flex-1 overflow-y-auto">
+                  {radarQ.isPending ? (
+                    <p className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Consultando o RadarLot...
+                    </p>
+                  ) : radarQ.data && !radarQ.data.ok ? (
+                    <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {radarQ.data.erro}
+                    </p>
+                  ) : radarBoloes.length === 0 ? (
+                    <p className="py-4 text-sm text-muted-foreground">
+                      Nenhum bolão encontrado. Se você acabou de cadastrar no RadarLot, toque em
+                      Atualizar.
+                    </p>
+                  ) : (
+                    <ul className="flex flex-col gap-2">
+                      {radarBoloes.map((b) => (
+                        <li key={b.codigo}>
+                          <button
+                            type="button"
+                            onClick={() => aplicarRadarlot(b)}
+                            className="w-full rounded-md border border-border px-3 py-2 text-left hover:bg-accent"
+                          >
+                            <span className="flex items-center justify-between gap-2">
+                              <strong className="text-sm text-foreground">
+                                {b.modalidadeNome} · concurso {b.concurso || "—"}
+                              </strong>
+                              <span
+                                className="shrink-0 text-[11px] text-muted-foreground"
+                                title={b.codigo}
+                              >
+                                …{b.codigo.slice(-6)}
+                              </span>
+                            </span>
+                            <span className="mt-0.5 block text-xs text-muted-foreground">
+                              {b.dataSorteio ? `${dataBr(b.dataSorteio)} · ` : ""}
+                              {b.cotasDisponiveis} de {b.totalCotas} cota(s) disponíveis
+                              {b.esgotado ? " (esgotado na vitrine)" : ""}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              {brl(b.valorSemTarifa)} + {brl(b.taxa)} de taxa
+                              {b.loterica ? ` · ${b.loterica}` : ""}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
