@@ -49,7 +49,11 @@ export function BolaoRapidoModal({
               <p className="text-sm text-muted-foreground">
                 Cota {brl(bolao.valorCota)} · Taxa {brl(bolao.taxa)}
                 {bolao.disponiveis !== null &&
-                  ` · ${bolao.disponiveis === 0 ? "esgotado" : `${bolao.disponiveis} disp.`}`}
+                  ` · ${
+                    bolao.disponiveis === 0
+                      ? "esgotado"
+                      : `${bolao.disponiveis} de ${bolao.totalCotas ?? "?"} disp.`
+                  }`}
               </p>
             </div>
           </div>

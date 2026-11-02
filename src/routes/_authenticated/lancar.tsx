@@ -150,30 +150,41 @@ function LancarPage() {
           .normalize("NFD")
           .replace(/[\u0300-\u036f]/g, "")
           .replace(/\s+/g, " ");
+      const hojeStr = hoje();
       // Estoque atual agrupado por bolão (nome + concurso + preço): é o que dá para vender.
       const grupos = new Map<string, ModeloBolao>();
       for (const e of resNovo.estoques ?? []) {
+        // Rodada já sorteada não aparece para o operador — evita baixa no
+        // concurso antigo por engano (o lote precisa ser rolado pelo admin).
+        if (e.data && e.data < hojeStr) continue;
         const nome = String(e.nome ?? "").trim();
         const conc = String(e.concurso ?? "").trim();
         const chave = `${norm(nome)}|${conc}|${e.valorCota}|${e.taxa}`;
         const atual = grupos.get(chave);
         if (atual) {
+          atual.ids.push(e.id);
           if (atual.disponiveis !== null) atual.disponiveis += Number(e.disponiveis ?? 0);
+          if (atual.totalCotas !== null) atual.totalCotas += Number(e.cotas ?? 0);
           continue;
         }
         grupos.set(chave, {
           id: e.id,
+          ids: [e.id],
           concurso: `${nome}${conc ? ` ${conc}` : ""}`.trim(),
           nome,
           valorCota: e.valorCota,
           taxa: e.taxa,
           disponiveis: Number(e.disponiveis ?? 0),
+          totalCotas: Number(e.cotas ?? 0),
           estoqueConcurso: conc,
         });
       }
-      return [...grupos.values()].sort((a, b) =>
-        compararBoloes({ nome: a.nome || a.concurso }, { nome: b.nome || b.concurso }),
-      );
+      return [...grupos.values()].sort((a, b) => {
+        const esgotadoA = a.disponiveis === 0 ? 1 : 0;
+        const esgotadoB = b.disponiveis === 0 ? 1 : 0;
+        if (esgotadoA !== esgotadoB) return esgotadoA - esgotadoB;
+        return compararBoloes({ nome: a.nome || a.concurso }, { nome: b.nome || b.concurso });
+      });
     },
     staleTime: 30_000,
   });
@@ -257,20 +268,29 @@ function LancarPage() {
     }
     setRapidoSalvando(true);
     setRapidoErro("");
-    const res = await registrarFn({
-      data: {
-        tipo: "BOLAO",
-        valor: bolaoRapido.valorCota,
-        descricao: rapidoConcurso || null,
-        campo: `bolao:${bolaoRapido.id}`,
-        quantidade: quant,
-        taxa: bolaoRapido.taxa,
-        data: dia,
-      },
-    });
+    const enviar = (confirmar: boolean) =>
+      registrarFn({
+        data: {
+          tipo: "BOLAO",
+          valor: bolaoRapido.valorCota,
+          descricao: rapidoConcurso || null,
+          campo: `bolao:${bolaoRapido.id}`,
+          quantidade: quant,
+          taxa: bolaoRapido.taxa,
+          data: dia,
+          estoqueIds: bolaoRapido.ids,
+          confirmarConcurso: confirmar,
+        },
+      });
+    let res = await enviar(false);
+    // Concurso digitado não tem lote: pergunta antes de baixar no estoque atual.
+    if (!res.ok && res.falha === "concurso_diferente" && window.confirm(res.erro)) {
+      res = await enviar(true);
+    }
     setRapidoSalvando(false);
     if (!res.ok) {
       setRapidoErro(res.erro);
+      await qc.invalidateQueries({ queryKey: ["modelos-bolao-lancar"] });
       return;
     }
     setBolaoRapido(null);
@@ -390,20 +410,29 @@ function LancarPage() {
       }
       setSalvando(true);
       setErro("");
-      const res = await registrarFn({
-        data: {
-          tipo: "BOLAO",
-          valor: modelo.valorCota,
-          descricao,
-          campo: `bolao:${modelo.id}`,
-          quantidade: quant,
-          taxa: modelo.taxa,
-          data: dia,
-        },
-      });
+      const enviar = (confirmar: boolean) =>
+        registrarFn({
+          data: {
+            tipo: "BOLAO",
+            valor: modelo.valorCota,
+            descricao,
+            campo: `bolao:${modelo.id}`,
+            quantidade: quant,
+            taxa: modelo.taxa,
+            data: dia,
+            estoqueIds: modelo.ids,
+            confirmarConcurso: confirmar,
+          },
+        });
+      let res = await enviar(false);
+      // Concurso digitado não tem lote: pergunta antes de baixar no estoque atual.
+      if (!res.ok && res.falha === "concurso_diferente" && window.confirm(res.erro)) {
+        res = await enviar(true);
+      }
       setSalvando(false);
       if (!res.ok) {
         setErro(res.erro);
+        await qc.invalidateQueries({ queryKey: ["modelos-bolao-lancar"] });
         return;
       }
       setOkMsg(
@@ -619,9 +648,10 @@ function LancarPage() {
                         <button
                           key={m.id}
                           type="button"
+                          disabled={esgotado}
                           onClick={() => { setBolaoRapido(m); setRapidoConcurso(m.estoqueConcurso); setRapidoQuant("1"); setRapidoErro(""); setModeloId(m.id); setDescricao(m.estoqueConcurso); }}
                           style={rowStyle}
-                          className="flex items-center gap-2 rounded-lg border-2 border-border p-2.5 text-left text-sm transition-all hover:border-primary/50 active:scale-[0.97]"
+                          className="flex items-center gap-2 rounded-lg border-2 border-border p-2.5 text-left text-sm transition-all hover:border-primary/50 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: cor }} />
                           <div className="min-w-0 flex-1">
@@ -638,7 +668,11 @@ function LancarPage() {
                                       : "text-emerald-600 dark:text-emerald-400"
                               }`}
                             >
-                              {m.disponiveis === null ? "sem estoque" : esgotado ? "esgotado" : `${m.disponiveis} disp.`}
+                              {m.disponiveis === null
+                                ? "sem estoque"
+                                : esgotado
+                                  ? "esgotado"
+                                  : `${m.disponiveis} de ${m.totalCotas ?? "?"} disp.`}
                             </span>
                           </div>
                         </button>

@@ -17,6 +17,8 @@ import {
   type VendaEstoque,
 } from "@/components/boloes/comum";
 import { controleBoloes } from "@/lib/controle-boloes.functions";
+import { listarEstoqueBoloes } from "@/lib/boloes.functions";
+import { buscarProximoConcurso } from "@/lib/caixa-loterias.functions";
 import {
   ajustarCotasEstoque,
   criarEstoque,
@@ -27,7 +29,12 @@ import {
   removerVendaEstoque,
 } from "@/lib/estoque-boloes.functions";
 import { brl, num } from "@/lib/fechamento-campos";
-import { MODALIDADES_LOTERIA } from "@/lib/loterias-sorteio";
+import {
+  getModalidade,
+  MODALIDADES_LOTERIA,
+  proximaDataSorteioISO,
+  validarDataSorteio,
+} from "@/lib/loterias-sorteio";
 import { relatorioVendasBoloes } from "@/lib/lancamentos-simples.functions";
 import { listarUsuarios, meuAcesso } from "@/lib/usuarios.functions";
 import { Loader2 } from "lucide-react";
@@ -107,6 +114,9 @@ function ControleBoloes() {
   const [novoCotas, setNovoCotas] = useState("");
   const [novoModalidade, setNovoModalidade] = useState("");
   const [novoObs, setNovoObs] = useState("");
+  const [novoModeloId, setNovoModeloId] = useState("");
+  const [novoConflito, setNovoConflito] = useState<{ id: string; cotas: number } | null>(null);
+  const [novoConcursoBuscando, setNovoConcursoBuscando] = useState(false);
 
   const [cotasLinha, setCotasLinha] = useState<Linha | null>(null);
   const [cotasTotal, setCotasTotal] = useState("");
@@ -164,6 +174,18 @@ function ControleBoloes() {
     enabled: admin,
     staleTime: 5 * 60 * 1000,
   });
+
+  // Modelos salvos (boloes_estoque) para reaproveitar valor/taxa no cadastro.
+  const modelosFn = useServerFn(listarEstoqueBoloes);
+  const modelosQ = useQuery({
+    queryKey: ["modelos-boloes-criacao"],
+    queryFn: () => modelosFn({ data: { situacao: "todos" } }),
+    enabled: admin && novoAberto,
+    staleTime: 60_000,
+  });
+
+  // Próximo concurso oficial da Caixa para preencher o cadastro sozinho.
+  const proximoConcursoFn = useServerFn(buscarProximoConcurso);
 
   const relatorioQ = useQuery({
     queryKey: ["relatorio-vendas-boloes", de, ate, filtroOperador],
@@ -260,8 +282,42 @@ function ControleBoloes() {
     onError: (e) => setAviso({ tipo: "erro", texto: e.message }),
   });
 
+  // Ao escolher a modalidade, preenche nome, próximo concurso e próxima data.
+  const aplicarModalidade = async (id: string) => {
+    setNovoModalidade(id);
+    setNovoModeloId("");
+    setNovoConflito(null);
+    const mod = MODALIDADES_LOTERIA.find((m) => m.id === id) ?? null;
+    if (!mod) {
+      setNovoNome("");
+      return;
+    }
+    setNovoNome(mod.nome);
+    setNovoData(proximaDataSorteioISO(mod, hojeSp()));
+    if (!mod.dias) return;
+    setNovoConcursoBuscando(true);
+    try {
+      const r = await proximoConcursoFn({ data: { modalidade: id } });
+      if (r.ok) setNovoConcurso(String(r.concurso));
+    } finally {
+      setNovoConcursoBuscando(false);
+    }
+  };
+
+  // Reaproveita valor/taxa de um modelo já cadastrado.
+  const aplicarModelo = (id: string) => {
+    setNovoModeloId(id);
+    setNovoConflito(null);
+    const m = (modelosQ.data?.boloes ?? []).find((x) => x.id === id);
+    if (!m) return;
+    setNovoModalidade("");
+    setNovoNome(m.concurso);
+    setNovoValor(m.valorCota ? String(m.valorCota).replace(".", ",") : "");
+    setNovoTaxa(m.taxa ? String(m.taxa).replace(".", ",") : "");
+  };
+
   const criarMut = useMutation({
-    mutationFn: () =>
+    mutationFn: (somarAoExistente: boolean) =>
       criarFn({
         data: {
           nome: novoNome.trim(),
@@ -274,22 +330,59 @@ function ControleBoloes() {
           modalidade: novoModalidade,
           observacoes: novoObs.trim(),
           salvarModelo: true,
+          modeloId: novoModeloId || null,
+          somarAoExistente,
         },
       }),
     onSuccess: (r) => {
       if (r.ok) {
-        setAviso({ tipo: "ok", texto: "Bolão criado." });
+        const somado = "somado" in r && r.somado;
+        const novoId = r.ids[0];
+        const novoLote: Linha | null =
+          !somado && novoId
+            ? {
+                nome: novoNome.trim(),
+                concurso: novoConcurso.trim(),
+                valorCota: num(novoValor),
+                taxa: num(novoTaxa),
+                data: novoData,
+                observacoes: novoObs.trim(),
+                cotas: r.cotas,
+                vendidas: 0,
+                disponiveis: r.cotas,
+                situacao: "ativo",
+                finalizado: false,
+                ids: [novoId],
+                vendidasLoja: 0,
+                vendidasMkp: 0,
+                ultimaVenda: "",
+                celulas: {},
+                porDia: [],
+              }
+            : null;
+        setAviso({
+          tipo: "ok",
+          texto: somado
+            ? `Cotas somadas ao lote existente (agora ${r.cotas} cotas).`
+            : "Bolão criado.",
+        });
         setNovoAberto(false);
+        setNovoConflito(null);
+        setNovoModeloId("");
         setNovoNome("");
         setNovoConcurso("");
         setNovoValor("");
         setNovoTaxa("");
         setNovoCotas("");
         setNovoObs("");
+        invalidar();
+        // Já abre a venda do lote criado (menos quando só somou cotas).
+        if (novoLote) abrirVenda(novoLote);
       } else {
+        const conflito = "conflito" in r ? r.conflito : null;
+        setNovoConflito(conflito ?? null);
         setAviso({ tipo: "erro", texto: r.erro });
       }
-      invalidar();
     },
     onError: (e) => setAviso({ tipo: "erro", texto: e.message }),
   });
@@ -417,6 +510,11 @@ function ControleBoloes() {
           `Todas as cotas foram vendidas. Depois de finalizar não dá para vender nem reativar.`;
     if (window.confirm(texto)) finalizarMut.mutate(l);
   };
+
+  const erroDataSorteio = novoModalidade
+    ? validarDataSorteio(getModalidade(novoModalidade), novoData)
+    : null;
+  const totalPrevisto = Math.round(num(novoCotas)) * (num(novoValor) + num(novoTaxa));
 
   return (
     <main className="min-h-screen bg-background px-4 pb-6 pt-4">
@@ -904,12 +1002,28 @@ function ControleBoloes() {
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-xl">
             <h3 className="text-base font-semibold text-foreground">Novo bolão</h3>
+            <label className="mt-3 block text-xs text-muted-foreground">
+              Usar um modelo já cadastrado (opcional)
+              <select
+                value={novoModeloId}
+                onChange={(e) => aplicarModelo(e.target.value)}
+                className={`${input} mt-1 w-full`}
+              >
+                <option value="">Novo modelo / preencher manualmente</option>
+                {(modelosQ.data?.boloes ?? []).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.concurso} · {brl(m.valorCota)}
+                    {m.taxa ? ` + taxa ${brl(m.taxa)}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="mt-3 grid grid-cols-2 gap-3">
               <label className="col-span-2 block text-xs text-muted-foreground">
                 Modalidade
                 <select
                   value={novoModalidade}
-                  onChange={(e) => setNovoModalidade(e.target.value)}
+                  onChange={(e) => void aplicarModalidade(e.target.value)}
                   className={`${input} mt-1 w-full`}
                 >
                   <option value="">Outro / personalizado</option>
@@ -925,7 +1039,10 @@ function ControleBoloes() {
                 <input
                   type="text"
                   value={novoNome}
-                  onChange={(e) => setNovoNome(e.target.value)}
+                  onChange={(e) => {
+                    setNovoNome(e.target.value);
+                    setNovoConflito(null);
+                  }}
                   placeholder={
                     novoModalidade
                       ? MODALIDADES_LOTERIA.find((m) => m.id === novoModalidade)?.nome
@@ -939,18 +1056,32 @@ function ControleBoloes() {
                 <input
                   type="text"
                   value={novoConcurso}
-                  onChange={(e) => setNovoConcurso(e.target.value)}
+                  onChange={(e) => {
+                    setNovoConcurso(e.target.value);
+                    setNovoConflito(null);
+                  }}
                   className={`${input} mt-1 w-full`}
                 />
+                {novoConcursoBuscando && (
+                  <span className="mt-1 block text-[11px] text-muted-foreground">
+                    Buscando o concurso atual na Caixa...
+                  </span>
+                )}
               </label>
               <label className="block text-xs text-muted-foreground">
                 Data do sorteio
                 <input
                   type="date"
                   value={novoData}
-                  onChange={(e) => setNovoData(e.target.value)}
+                  onChange={(e) => {
+                    setNovoData(e.target.value);
+                    setNovoConflito(null);
+                  }}
                   className={`${input} mt-1 w-full`}
                 />
+                {erroDataSorteio && (
+                  <span className="mt-1 block text-[11px] text-destructive">{erroDataSorteio}</span>
+                )}
               </label>
               <label className="block text-xs text-muted-foreground">
                 Valor da cota
@@ -958,7 +1089,10 @@ function ControleBoloes() {
                   type="text"
                   inputMode="decimal"
                   value={novoValor}
-                  onChange={(e) => setNovoValor(e.target.value)}
+                  onChange={(e) => {
+                    setNovoValor(e.target.value);
+                    setNovoConflito(null);
+                  }}
                   placeholder="2,00"
                   className={`${input} mt-1 w-full`}
                 />
@@ -969,7 +1103,10 @@ function ControleBoloes() {
                   type="text"
                   inputMode="decimal"
                   value={novoTaxa}
-                  onChange={(e) => setNovoTaxa(e.target.value)}
+                  onChange={(e) => {
+                    setNovoTaxa(e.target.value);
+                    setNovoConflito(null);
+                  }}
                   placeholder="0,00"
                   className={`${input} mt-1 w-full`}
                 />
@@ -980,7 +1117,10 @@ function ControleBoloes() {
                   type="text"
                   inputMode="numeric"
                   value={novoCotas}
-                  onChange={(e) => setNovoCotas(e.target.value)}
+                  onChange={(e) => {
+                    setNovoCotas(e.target.value);
+                    setNovoConflito(null);
+                  }}
                   className={`${input} mt-1 w-full`}
                 />
               </label>
@@ -994,22 +1134,52 @@ function ControleBoloes() {
                 />
               </label>
             </div>
+            <div className="mt-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              <div className="flex items-center justify-between gap-2">
+                <span>
+                  {Math.round(num(novoCotas))} cota(s) × {brl(num(novoValor) + num(novoTaxa))}
+                </span>
+                <strong className="text-sm text-foreground">{brl(totalPrevisto)}</strong>
+              </div>
+              <span>Total previsto de arrecadação (cotas × valor + taxa).</span>
+            </div>
+            {novoConflito && (
+              <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+                Já existe um lote desse bolão com {novoConflito.cotas} cota(s).{" "}
+                <button
+                  type="button"
+                  disabled={criarMut.isPending}
+                  onClick={() => criarMut.mutate(true)}
+                  className="font-semibold underline disabled:opacity-50"
+                >
+                  Somar as cotas ao lote existente
+                </button>
+              </div>
+            )}
             <p className="mt-2 text-xs text-muted-foreground">
-              Cria um lote com o total de cotas. Para vender no bolão, use o botão Vender da
-              linha — as cotas saem do lote mais antigo.
+              Cria um lote com o total de cotas e abre a venda em seguida. As cotas saem do lote
+              mais antigo.
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setNovoAberto(false)}
+                onClick={() => {
+                  setNovoAberto(false);
+                  setNovoConflito(null);
+                }}
                 className="h-9 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground hover:bg-accent"
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                disabled={criarMut.isPending || Math.round(num(novoCotas)) < 1}
-                onClick={() => criarMut.mutate()}
+                disabled={
+                  criarMut.isPending ||
+                  Math.round(num(novoCotas)) < 1 ||
+                  num(novoValor) <= 0 ||
+                  Boolean(erroDataSorteio)
+                }
+                onClick={() => criarMut.mutate(false)}
                 className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 {criarMut.isPending ? "Criando…" : "Criar bolão"}

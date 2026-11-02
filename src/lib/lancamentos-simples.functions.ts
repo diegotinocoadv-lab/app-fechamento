@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { ehAdmin } from "@/lib/auth-guard";
 import { resolverAlvoBolaoLivre } from "@/lib/loterias-sorteio";
 
 export const TIPOS_LANCAMENTO = ["GAVETA", "CAIXA", "BOLAO", "RELATORIO"] as const;
@@ -15,6 +16,12 @@ const novo = z.object({
   quantidade: z.number().int().min(1).max(10000).optional().default(1),
   taxa: z.number().finite().optional().default(0),
   data: z.string().min(8).max(10).optional().default(""),
+  /** Lotes do grupo escolhido no /lancar (mesmo bolão/preço) — baixa neles primeiro. */
+  estoqueIds: z.array(z.string().uuid()).max(50).optional().default([]),
+  /** Confirma dar baixa no estoque atual quando o concurso não tem lote próprio. */
+  confirmarConcurso: z.boolean().optional().default(false),
+  /** Administrador: mantém o lançamento mesmo sem baixa (venda atrasada). */
+  permitirSemEstoque: z.boolean().optional().default(false),
 });
 
 const filtro = z.object({
@@ -103,20 +110,42 @@ export type CandidatoLoteBolao = {
 const mesmoPreco = (a: number | string | null | undefined, b: number) =>
   Math.abs(Number(String(a ?? "").replace(",", ".")) - b) < 0.005;
 
+/** Resultado da baixa automática de estoque. */
+export type ResultadoBaixaEstoque = {
+  /** Mensagem para exibir/registrar. */
+  aviso: string;
+  /** Cotas efetivamente baixadas. */
+  baixadas: number;
+  /** `false` = a baixa não foi aplicada (nada foi gravado). */
+  aplicada: boolean;
+  /** Motivo quando a baixa não foi aplicada ou merece atenção. */
+  falha:
+    | "nome_vazio"
+    | "sem_estoque"
+    | "esgotado"
+    | "varios_concursos"
+    | "concurso_diferente"
+    | "corrida"
+    | "erro"
+    | "preco_sem_lote"
+    | null;
+};
+
 /**
  * Ordem dos lotes candidatos para a baixa de estoque:
- * 1. lote escolhido explicitamente no /lancar (prioridadeId);
+ * 1. lotes escolhidos explicitamente no /lancar (prioridadeIds/prioridadeId);
  * 2. lote com o MESMO PREÇO da cota (valor; taxa como desempate) — sem isso,
  *    cotas de preços diferentes (10,12 / 121,50 / 154,63...) caem todas no
  *    lote mais antigo e o Controle de Bolões mostra preço errado;
  * 3. lote ATIVO antes do encerrado (mesmo preço);
  * 4. mesmo modelo; 5. mais antigo. Sem valor informado, vale o comportamento
- * antigo (modelo → antigo).
+ *    antigo (modelo → antigo).
  */
 export function ordemCandidatosLote(
   cands: CandidatoLoteBolao[],
   opts: {
     prioridadeId?: string | null;
+    prioridadeIds?: string[] | null;
     modeloId?: string | null;
     valor?: number | null;
     taxa?: number | null;
@@ -124,6 +153,10 @@ export function ordemCandidatosLote(
 ): number[] {
   const temValor = typeof opts.valor === "number" && Number.isFinite(opts.valor) && opts.valor > 0;
   const temTaxa = typeof opts.taxa === "number" && Number.isFinite(opts.taxa) && opts.taxa > 0;
+  const prioridades = new Set<string>([
+    ...(opts.prioridadeIds ?? []),
+    ...(opts.prioridadeId ? [opts.prioridadeId] : []),
+  ]);
   const nivelPreco = (i: number): number => {
     if (!temValor) return 2;
     const c = cands[i];
@@ -134,8 +167,8 @@ export function ordemCandidatosLote(
   return cands
     .map((_, i) => i)
     .sort((a, b) => {
-      const pa = opts.prioridadeId && cands[a]?.id === opts.prioridadeId ? 0 : 1;
-      const pb = opts.prioridadeId && cands[b]?.id === opts.prioridadeId ? 0 : 1;
+      const pa = cands[a]?.id && prioridades.has(String(cands[a]?.id)) ? 0 : 1;
+      const pb = cands[b]?.id && prioridades.has(String(cands[b]?.id)) ? 0 : 1;
       if (pa !== pb) return pa - pb;
       const na = nivelPreco(a);
       const nb = nivelPreco(b);
@@ -164,19 +197,26 @@ export async function baixarEstoqueOperador(opts: {
   lancamentoId: string;
   /** Lote de estoque escolhido no /lancar — baixa primeiro nele. */
   prioridadeId?: string | null;
+  /** Todos os lotes do grupo escolhido no /lancar (mesmo bolão/preço). */
+  prioridadeIds?: string[] | null;
   /** Valor da cota lançado — a baixa vai no lote com esse preço. */
   valor?: number | null;
   /** Taxa da cota lançada — desempate entre lotes com o mesmo valor. */
   taxa?: number | null;
-}): Promise<string> {
+  /** Confirma baixar no estoque atual quando o concurso informado não tem lote. */
+  confirmarConcursoDiferente?: boolean;
+}): Promise<ResultadoBaixaEstoque> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   let alvoNome = normNome(opts.nome);
   let alvoConcurso = normConcurso(opts.concurso);
   let sufixo = alvoConcurso ? ` (concurso ${alvoConcurso})` : "";
 
-  if (!alvoNome) {
-    return "Descrição do bolão vazia — lançamento salvo sem baixa.";
-  }
+  const falhou = (
+    aviso: string,
+    falha: ResultadoBaixaEstoque["falha"],
+  ): ResultadoBaixaEstoque => ({ aviso, baixadas: 0, aplicada: false, falha });
+
+  if (!alvoNome) return falhou("Descrição do bolão vazia.", "nome_vazio");
   const { data: linhas } = await supabaseAdmin
     .from("estoque_boloes")
     .select("id, modelo_id, nome, concurso, cotas, created_at, valor_cota, taxa, situacao")
@@ -198,7 +238,7 @@ export async function baixarEstoqueOperador(opts: {
     }
   }
   if (cands.length === 0) {
-    return `Sem estoque de ${opts.nome}${sufixo} — lançamento salvo sem baixa.`;
+    return falhou(`Sem estoque de ${opts.nome}${sufixo}.`, "sem_estoque");
   }
 
   let concursoFallback = false;
@@ -206,8 +246,18 @@ export async function baixarEstoqueOperador(opts: {
     const porConcurso = cands.filter((l) => normConcurso(l.concurso) === alvoConcurso);
     if (porConcurso.length === 0) {
       // O lote pode estar com um concurso antigo (estoque ainda não rolado para
-      // a rodada atual). Nesse caso dá baixa mesmo assim no estoque do bolão
-      // (mesmo nome), avisando que o concurso informado não tinha lote próprio.
+      // a rodada atual). Só dá baixa no estoque atual depois da confirmação.
+      if (!opts.confirmarConcursoDiferente) {
+        const concursos = [
+          ...new Set(cands.map((l) => String(l.concurso ?? "").trim()).filter(Boolean)),
+        ];
+        const nota = concursos.length ? ` Lotes disponíveis: ${concursos.join(", ")}.` : "";
+        return falhou(
+          `O concurso ${alvoConcurso} não tem lote de ${opts.nome}.${nota} ` +
+            "Confirme para dar baixa no estoque atual.",
+          "concurso_diferente",
+        );
+      }
       concursoFallback = true;
     } else {
       cands = porConcurso;
@@ -215,7 +265,10 @@ export async function baixarEstoqueOperador(opts: {
   } else {
     const concursos = new Set(cands.map((l) => normConcurso(l.concurso)).filter(Boolean));
     if (concursos.size > 1) {
-      return `Vários concursos ativos de ${opts.nome} — informe o concurso para dar baixa no estoque.`;
+      return falhou(
+        `Vários concursos ativos de ${opts.nome} — informe o concurso para dar baixa no estoque.`,
+        "varios_concursos",
+      );
     }
   }
 
@@ -235,7 +288,13 @@ export async function baixarEstoqueOperador(opts: {
   );
   const totalDisponivel = disponiveis.reduce((s, d) => s + d, 0);
   if (totalDisponivel === 0) {
-    return `Estoque esgotado de ${opts.nome}${sufixo} — lançamento salvo sem baixa.`;
+    return falhou(`Estoque esgotado de ${opts.nome}${sufixo}.`, "esgotado");
+  }
+  if (opts.quantidade > totalDisponivel) {
+    return falhou(
+      `Estoque insuficiente de ${opts.nome}${sufixo}: restam ${totalDisponivel} cota(s).`,
+      "esgotado",
+    );
   }
 
   const temValor = typeof opts.valor === "number" && Number.isFinite(opts.valor) && opts.valor > 0;
@@ -280,12 +339,19 @@ export async function baixarEstoqueOperador(opts: {
     baixadas += take;
   }
 
+  if (restante > 0) {
+    return falhou(
+      `Estoque insuficiente de ${opts.nome}${sufixo}: restam ${baixadas} cota(s).`,
+      "esgotado",
+    );
+  }
+
   if (inserts.length > 0) {
     const { data: criadas, error } = await supabaseAdmin
       .from("estoque_boloes_vendas")
       .insert(inserts)
       .select("id");
-    if (error) return `Falha ao dar baixa no estoque: ${error.message}`;
+    if (error) return falhou(`Falha ao dar baixa no estoque: ${error.message}`, "erro");
     // Revalida depois de inserir: não há lock no banco, então duas vendas
     // simultâneas podem passar na checagem de saldo. Se o total estourou as
     // cotas, desfaz as linhas desta baixa para o estoque nunca ficar negativo.
@@ -307,22 +373,43 @@ export async function baixarEstoqueOperador(opts: {
       if (idsCriadas.length > 0) {
         await supabaseAdmin.from("estoque_boloes_vendas").delete().in("id", idsCriadas);
       }
-      return `Corrida no estoque de ${opts.nome}${sufixo} — baixa não aplicada, tente novamente.`;
+      return falhou(
+        `Corrida no estoque de ${opts.nome}${sufixo} — baixa não aplicada, tente novamente.`,
+        "corrida",
+      );
     }
   }
-  if (restante > 0) {
-    return `Baixa parcial: ${baixadas} de ${opts.quantidade} cota(s) — estoque esgotado.` + notaPreco;
-  }
+
   if (concursoFallback) {
-    return `Baixa no estoque do bolão ${opts.nome}: ${baixadas} cota(s) (o concurso ${alvoConcurso} não tinha lote próprio).` + notaPreco;
+    return {
+      aviso:
+        `Baixa no estoque do bolão ${opts.nome}: ${baixadas} cota(s) ` +
+        `(o concurso ${alvoConcurso} não tinha lote próprio).` +
+        notaPreco,
+      baixadas,
+      aplicada: true,
+      falha: null,
+    };
   }
   if (semLotePreco) {
     // Prefixo diferente de "Baixa automática": vira log auditável + toast,
     // para o preço digitado sem lote correspondente não passar despercebido.
     const usado = cands.find((c) => c.id === inserts[0]?.estoque_id);
-    return `Preço sem lote: ${baixadas} cota(s) de ${opts.nome}${sufixo} baixadas no lote de ${brlNum(Number(usado?.valor_cota ?? 0))} — nenhum lote com ${brlNum(opts.valor as number)}.`;
+    return {
+      aviso:
+        `Preço sem lote: ${baixadas} cota(s) de ${opts.nome}${sufixo} baixadas no lote de ` +
+        `${brlNum(Number(usado?.valor_cota ?? 0))} — nenhum lote com ${brlNum(opts.valor as number)}.`,
+      baixadas,
+      aplicada: true,
+      falha: "preco_sem_lote",
+    };
   }
-  return `Baixa automática no estoque: ${baixadas} cota(s).`;
+  return {
+    aviso: `Baixa automática no estoque: ${baixadas} cota(s).`,
+    baixadas,
+    aplicada: true,
+    falha: null,
+  };
 }
 
 async function estornarEstoqueOperador(lancamentoId: string) {
@@ -432,9 +519,14 @@ export const registrarLancamento = createServerFn({ method: "POST" })
             .eq("id", modeloId)
             .maybeSingle();
           if (!modelo) {
+            await context.supabase
+              .from("lancamentos_simples")
+              .delete()
+              .eq("id", String((criado as { id: string }).id));
             return {
-              ok: true as const,
-              aviso: "Modelo do bolão não encontrado — lançamento salvo sem baixa no estoque.",
+              ok: false as const,
+              erro: "Modelo do bolão não encontrado. Atualize a lista e tente novamente.",
+              falha: "sem_estoque" as const,
             };
           }
           nome = String(modelo.concurso ?? "");
@@ -443,7 +535,7 @@ export const registrarLancamento = createServerFn({ method: "POST" })
       } else {
         nome = data.descricao;
       }
-      const aviso = await baixarEstoqueOperador({
+      const baixa = await baixarEstoqueOperador({
         modeloId: porModelo ? data.campo.slice("bolao:".length) : null,
         nome,
         concurso,
@@ -451,27 +543,57 @@ export const registrarLancamento = createServerFn({ method: "POST" })
         data: dataLanc,
         operadorId: context.userId,
         operadorNome: perfil?.nome || perfil?.email || null,
-        lancamentoId: criado.id as string,
+        lancamentoId: String((criado as { id: string }).id),
         prioridadeId,
+        prioridadeIds: data.estoqueIds,
         valor: data.valor,
         taxa: data.taxa,
+        confirmarConcursoDiferente: data.confirmarConcurso,
       });
-      // Toda baixa que não foi limpa ("Baixa automática no estoque: N")
-      // vira registro auditável — o toast sozinho se perde.
-      if (aviso && !aviso.startsWith("Baixa automática")) {
-        const perfilInfo = perfil as { nome?: string; email?: string } | null;
+      const perfilInfo = perfil as { nome?: string; email?: string } | null;
+      if (!baixa.aplicada) {
+        // Sem estoque / esgotado / concurso diferente / corrida: a venda não
+        // fica "solta". Remove o lançamento e devolve o motivo para a tela.
+        let permitir = false;
+        if (data.permitirSemEstoque) {
+          permitir = await ehAdmin(context);
+        }
+        const manterSemBaixa =
+          permitir && baixa.falha !== "erro" && baixa.falha !== "corrida";
+        if (!manterSemBaixa) {
+          await context.supabase
+            .from("lancamentos_simples")
+            .delete()
+            .eq("id", String((criado as { id: string }).id));
+          return { ok: false as const, erro: baixa.aviso, falha: baixa.falha };
+        }
         await registrarLogBaixa({
           userId: context.userId,
           userName: perfilInfo?.nome || perfilInfo?.email || null,
           lancamentoId: String((criado as { id: string }).id),
-          aviso,
+          aviso: baixa.aviso,
+          nome,
+          concurso,
+          quantidade: data.quantidade,
+          data: dataLanc,
+        });
+        return { ok: true as const, aviso: baixa.aviso, semBaixa: true };
+      }
+      // Toda baixa que não foi limpa ("Baixa automática no estoque: N")
+      // vira registro auditável — o toast sozinho se perde.
+      if (baixa.aviso && !baixa.aviso.startsWith("Baixa automática")) {
+        await registrarLogBaixa({
+          userId: context.userId,
+          userName: perfilInfo?.nome || perfilInfo?.email || null,
+          lancamentoId: String((criado as { id: string }).id),
+          aviso: baixa.aviso,
           nome,
           concurso,
           quantidade: data.quantidade,
           data: dataLanc,
         });
       }
-      return { ok: true as const, aviso };
+      return { ok: true as const, aviso: baixa.aviso };
     }
 
     return { ok: true as const, aviso: "" };

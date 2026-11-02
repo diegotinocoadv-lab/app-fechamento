@@ -83,7 +83,7 @@ async function sincronizarBoloesFechamento(opts: {
       continue;
     }
     const lancamentoId = String((criado as { id: string }).id);
-    const aviso = await baixarEstoqueOperador({
+    const baixa = await baixarEstoqueOperador({
       modeloId: null,
       nome: linha.rotulo,
       concurso: linha.numero,
@@ -95,8 +95,8 @@ async function sincronizarBoloesFechamento(opts: {
       valor: linha.valor,
       taxa: linha.taxa,
     });
-    if (aviso && !aviso.startsWith("Baixa automática")) {
-      avisos.push(`"${linha.rotulo}": ${aviso}`);
+    if (baixa.aviso && !baixa.aviso.startsWith("Baixa automática")) {
+      avisos.push(`"${linha.rotulo}": ${baixa.aviso}`);
       try {
         await opts.supabaseAdmin.from("activity_logs").insert({
           user_id: opts.operadorId,
@@ -108,7 +108,7 @@ async function sincronizarBoloesFechamento(opts: {
             nome: linha.rotulo,
             concurso: linha.numero,
             quantidade: linha.quantidade,
-            aviso,
+            aviso: baixa.aviso,
           },
         });
       } catch {

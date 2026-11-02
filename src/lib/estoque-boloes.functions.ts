@@ -46,6 +46,8 @@ const novoEstoque = z.object({
   modalidade: z.string().max(40).optional().default(""),
   observacoes: z.string().max(300).optional().default(""),
   salvarModelo: z.boolean().optional().default(true),
+  /** Confirma somar as cotas a um lote já existente (mesmo bolão/concurso/preço). */
+  somarAoExistente: z.boolean().optional().default(false),
 });
 
 const alvo = z.object({ id: z.string().uuid() });
@@ -162,6 +164,9 @@ export const criarEstoque = createServerFn({ method: "POST" })
       if (!data.taxa) taxa = Number(modelo.taxa ?? 0);
     } else {
       if (!nome) return { ok: false as const, erro: "Informe o nome do bolão." };
+      if (!(valorCota > 0)) {
+        return { ok: false as const, erro: "Informe o valor da cota (maior que zero)." };
+      }
       if (data.salvarModelo) {
         // Mesmo nome (ignorando caixa/acentos/hífens) = reaproveita o modelo.
         const { data: existentes } = await context.supabase
@@ -207,6 +212,71 @@ export const criarEstoque = createServerFn({ method: "POST" })
       criado_por: context.userId,
     };
 
+    if (!(valorCota > 0)) {
+      return { ok: false as const, erro: "Informe o valor da cota (maior que zero)." };
+    }
+
+    const normConcursoEstoque = (s: unknown) =>
+      String(s ?? "")
+        .replace(/\D+/g, "")
+        .replace(/^0+(?=\d)/, "");
+    const alvoConcurso = normConcursoEstoque(data.concurso);
+
+    // Mesmo bolão + concurso + preço já existe: avisa (ou soma as cotas, se o
+    // administrador confirmou) para não criar duas linhas iguais no quadro.
+    const { data: existentes } = await context.supabase
+      .from("estoque_boloes")
+      .select("id, nome, concurso, cotas, valor_cota, taxa, situacao")
+      .in("situacao", ["ativo", "encerrado"])
+      .eq("nome", nome)
+      .eq("valor_cota", valorCota)
+      .eq("taxa", taxa)
+      .order("created_at", { ascending: true })
+      .limit(500);
+    const igual = (existentes ?? []).find(
+      (l: { concurso: string | null }) => normConcursoEstoque(l.concurso) === alvoConcurso,
+    ) as { id: string; cotas: number } | undefined;
+
+    if (igual && !data.somarAoExistente) {
+      const rotuloConcurso = data.concurso.trim() ? ` · concurso ${data.concurso.trim()}` : "";
+      return {
+        ok: false as const,
+        erro:
+          `Já existe um lote de ${nome}${rotuloConcurso} nesse preço, com ` +
+          `${Number(igual.cotas ?? 0)} cota(s). Some as cotas a ele ou ajuste o concurso/valor.`,
+        conflito: { id: String(igual.id), cotas: Number(igual.cotas ?? 0) },
+      };
+    }
+
+    if (igual && data.somarAoExistente) {
+      const totalSomado = Number(igual.cotas ?? 0) + totalCotas;
+      if (totalSomado > 100000) {
+        return { ok: false as const, erro: "Total de cotas acima do permitido (máx. 100.000)." };
+      }
+      const { error: erroSoma } = await context.supabase
+        .from("estoque_boloes")
+        .update({ cotas: totalSomado })
+        .eq("id", igual.id);
+      if (erroSoma) {
+        return { ok: false as const, erro: `Falha ao somar as cotas: ${erroSoma.message}` };
+      }
+      await registrarLog(context, "estoque_cotas_somadas", {
+        id: igual.id,
+        nome,
+        concurso: data.concurso,
+        cotasSomadas: totalCotas,
+        total: totalSomado,
+      });
+      return {
+        ok: true as const,
+        erro: "",
+        ids: [String(igual.id)],
+        cotas: totalSomado,
+        modeloCriado,
+        somado: true,
+      };
+    }
+
     const { data: criados, error } = await context.supabase
       .from("estoque_boloes")
       .insert([registro])
@@ -227,6 +297,7 @@ export const criarEstoque = createServerFn({ method: "POST" })
       ids: (criados ?? []).map((c: any) => c.id as string),
       cotas: totalCotas,
       modeloCriado,
+      somado: false,
     };
   });
 

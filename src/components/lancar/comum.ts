@@ -18,6 +18,8 @@ export const rotuloCampo = (key: string) =>
 
 export type ModeloBolao = {
   id: string;
+  /** Todos os lotes do grupo (mesmo bolão, concurso, preço e taxa). */
+  ids: string[];
   concurso: string;
   /** Nome/modalidade do bolão (para cor); igual ao concurso nos modelos antigos. */
   nome: string;
@@ -25,6 +27,8 @@ export type ModeloBolao = {
   taxa: number;
   /** Saldo disponível no estoque; null quando é modelo antigo sem estoque. */
   disponiveis: number | null;
+  /** Total de cotas do grupo (para mostrar "restam X de Y"). */
+  totalCotas: number | null;
   /** Concurso do estoque (pré-preenchido no modal). */
   estoqueConcurso: string;
 };
