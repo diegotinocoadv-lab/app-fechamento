@@ -3,14 +3,13 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppNav } from "@/components/AppNav";
-import { getLoteriaDotColor, getLoteriaRowStyle } from "@/lib/loteria-colors";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   IMPORT_STORAGE_KEY, brlSinal, classeDiferenca, type FechamentoImportado,
   VALOR_CAMPOS, type ValorKey, SALDO_ITENS, type SaldoKey, type Saldo,
-  saldoVazio, valoresVazios, brl, num, agruparBoloesLanc, type Bolao as BaseBolao
+  saldoVazio, valoresVazios, brl, num, agruparBoloesLanc
 } from "@/lib/fechamento-campos";
 import { gerarDocFechamento } from "@/lib/fechamento-pdf";
 import { salvarFechamento } from "@/lib/fechamento.functions";
@@ -20,7 +19,7 @@ import { Loader2 } from "lucide-react";
 import { resumoBoloesDia } from "@/lib/boloes.functions";
 import { listarEstoque } from "@/lib/estoque-boloes.functions";
 import {
-  compararBoloes, achaModalidade, getModalidade,
+  compararBoloes, achaModalidade,
 } from "@/lib/loterias-sorteio";
 import { concursoPorData } from "@/lib/caixa-loterias.functions";
 import { listarLancamentosSimples } from "@/lib/lancamentos-simples.functions";
@@ -53,22 +52,10 @@ export const Route = createFileRoute("/_authenticated/fechamento")({
   component: Fechamento,
 });
 
-type Bolao = BaseBolao & {
-  numero?: string;
-  lanc?: string;
-  /** Id da modalidade quando a linha veio do seletor de modalidades (sem estoque). */
-  mod?: string;
-  /** Nº preenchido pelo sistema (vigente da data do fechamento) — recalcula ao mudar a data. */
-  numeroAuto?: boolean;
-};
-
-const bolaoVazio = (): Bolao => ({
-  concurso: "",
-  numero: "",
-  valor: "",
-  taxa: "",
-  quant: "",
-});
+import { BarraAcoesFechamento } from "@/components/fechamento/BarraAcoesFechamento";
+import { ControleBoloesFechamento } from "@/components/fechamento/ControleBoloesFechamento";
+import { SaldoBloco } from "@/components/fechamento/SaldoBloco";
+import { bolaoVazio, type Bolao } from "@/components/fechamento/tipos";
 
 const hojeBR = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
@@ -788,66 +775,6 @@ function Fechamento() {
       .catch(() => {});
   };
 
-  /**
-   * A linha (b.concurso) corresponde à opção? Compara por igualdade ou pelo
-   * sufixo " 3062": fechamentos antigos guardavam só o número do concurso do
-   * estoque novo; hoje a opção vem como "MEGA 3062".
-   */
-  const corresponde = (opcaoConcurso: string, linhaConcurso: string) => {
-    if (opcaoConcurso === linhaConcurso) return true;
-    const linha = linhaConcurso.trim();
-    return linha !== "" && linha !== " " && opcaoConcurso.endsWith(` ${linha}`);
-  };
-
-  /** Id do modelo correspondente à linha (nome + valor da cota), para o seletor. */
-  const idModeloLinha = (b: Bolao) => {
-    const mesmos = opcoesBoloes.filter((o) => corresponde(o.concurso, b.concurso));
-    if (mesmos.length === 0) return "";
-    const exato = mesmos.find((o) => Math.abs(o.valorCota - num(b.valor)) < 0.005);
-    return (exato ?? mesmos[0]!).id;
-  };
-
-
-
-
-
-  const inputCls =
-    "h-8 w-28 rounded-md border border-input bg-background px-3 text-right text-sm text-foreground outline-none focus:ring-2 focus:ring-ring";
-
-  const renderSaldo = (
-    titulo: string,
-    saldo: Saldo,
-    setSaldo: (fn: (s: Saldo) => Saldo) => void,
-    totalSaldo: number,
-  ) => (
-    <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-      <h2 className="border-b border-border bg-secondary px-4 py-2 text-sm font-semibold uppercase tracking-wide text-secondary-foreground">
-        {titulo}
-      </h2>
-      <div className="divide-y divide-border">
-        {SALDO_ITENS.map((i) => (
-          <div key={i.key} className="flex items-center justify-between gap-4 px-4 py-1.5">
-            <span className="text-sm font-medium text-foreground">{i.label}</span>
-            <input
-              inputMode="decimal"
-              value={saldo[i.key]}
-              onChange={(e) => setSaldo((s) => ({ ...s, [i.key]: e.target.value }))}
-              placeholder="0"
-              className={inputCls}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center justify-between gap-4 border-t border-border bg-secondary/40 px-4 py-2">
-        <span className="text-sm font-semibold uppercase tracking-wide text-foreground">
-          Total
-        </span>
-        <span className="text-base font-bold text-foreground">
-          {brl(totalSaldo)}
-        </span>
-      </div>
-    </div>
-  );
 
   return (
     <main className="min-h-screen bg-background px-4 pb-24 pt-6">
@@ -933,7 +860,12 @@ function Fechamento() {
             <span className="text-base font-bold text-foreground">{brl(totalInicial)}</span>
           </div>
         </div>
-        {renderSaldo("Saldo Final", saldoFinal, setSaldoFinal, totalFinal)}
+        <SaldoBloco
+          titulo="Saldo Final"
+          saldo={saldoFinal}
+          setSaldo={setSaldoFinal}
+          total={totalFinal}
+        />
 
         <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-2 shadow-sm">
           <span className="text-sm font-semibold uppercase tracking-wide text-foreground">
@@ -987,244 +919,17 @@ function Fechamento() {
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-          <h2 className="border-b border-border bg-secondary px-4 py-2 text-sm font-semibold uppercase tracking-wide text-secondary-foreground">
-            Controle de Bolões
-          </h2>
-          <p className="border-b border-border bg-secondary/40 px-4 py-1.5 text-xs text-muted-foreground">
-            Linhas preenchidas aqui dão baixa automática no estoque ao salvar o
-            fechamento. As vindas do lançamento rápido já entram baixadas.
-          </p>
-
-          {/* Desktop: tabela */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th className="px-3 py-2">Bolão (modelo)</th>
-                  <th className="px-3 py-2">Concurso</th>
-                  <th className="px-3 py-2 text-right">Valor</th>
-                  <th className="px-3 py-2 text-right">Taxa</th>
-                  <th className="px-3 py-2 text-right">Quant.</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {boloes.map((b, idx) => {
-                  const naLista = opcoesBoloes.some((o) => corresponde(o.concurso, b.concurso));
-                  const modoManual = b.concurso !== "" && !naLista;
-                  const modeloAtivo = !modoManual ? opcoesBoloes.find((o) => o.id === idModeloLinha(b)) : null;
-                  const rowStyle = modeloAtivo
-                    ? getLoteriaRowStyle(modeloAtivo.nome || modeloAtivo.concurso)
-                    : b.mod
-                      ? getLoteriaRowStyle(getModalidade(b.mod)?.nome ?? "")
-                      : undefined;
-                  return (
-                  <tr key={idx} style={rowStyle}>
-                    <td className="px-3 py-1">
-                      <div className="flex items-center gap-2">
-                        {(() => {
-                          const nomeCor = !modoManual && idModeloLinha(b)
-                            ? (opcoesBoloes.find((o) => o.id === idModeloLinha(b))?.concurso ?? "")
-                            : b.mod
-                              ? (getModalidade(b.mod)?.nome ?? "")
-                              : "";
-                          const cor = nomeCor ? getLoteriaDotColor(nomeCor) : "";
-                          return cor ? <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: cor }} /> : null;
-                        })()}
-                        <select
-                          value={modoManual ? "__outro__" : idModeloLinha(b)}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (v === "__outro__") {
-                              setBolao(idx, "concurso", " ");
-                              setBolao(idx, "numeroAuto", false);
-                            } else {
-                              escolherBolao(idx, v);
-                            }
-                          }}
-                          className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-                        >
-                          <option value="">Escolha o bolão</option>
-                          {opcoesBoloes.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {`${o.concurso} • ${brl(o.valorCota)}`}
-                            </option>
-                          ))}
-                          <option value="__outro__">Outro (nome livre)</option>
-                        </select>
-                        {modoManual && (
-                          <input
-                            value={b.concurso}
-                            onChange={(e) => setBolao(idx, "concurso", e.target.value)}
-                            placeholder="Digite o bolão"
-                            className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-                          />
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-1">
-                      <input
-                        value={b.numero ?? ""}
-                        onChange={(e) => {
-                          setBolao(idx, "numero", e.target.value);
-                          setBolao(idx, "numeroAuto", false);
-                        }}
-                        placeholder="Nº do concurso"
-                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-                      />
-                    </td>
-                    <td className="px-3 py-1">
-                      <input inputMode="decimal" value={b.valor} onChange={(e) => setBolao(idx, "valor", e.target.value)} placeholder="0,00" className={inputCls} />
-                    </td>
-                    <td className="px-3 py-1">
-                      <input inputMode="decimal" value={b.taxa} onChange={(e) => setBolao(idx, "taxa", e.target.value)} placeholder="0,00" className={inputCls} />
-                    </td>
-                    <td className="px-3 py-1">
-                      <input inputMode="numeric" value={b.quant} onChange={(e) => setBolao(idx, "quant", e.target.value)} placeholder="0" className={inputCls} />
-                    </td>
-                  </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-border bg-secondary/50 text-sm font-bold">
-                  <td className="px-3 py-2" />
-                  <td className="px-3 py-2" />
-                  <td className="px-3 py-2 text-right text-foreground">{brl(totalValor)}</td>
-                  <td className="px-3 py-2 text-right text-foreground">{brl(totalTaxa)}</td>
-                  <td className="px-3 py-2 text-right text-foreground">{totalQuant}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          {/* Mobile: cards */}
-          <div className="md:hidden divide-y divide-border">
-            {boloes.map((b, idx) => {
-              const naLista = opcoesBoloes.some((o) => corresponde(o.concurso, b.concurso));
-              const modoManual = b.concurso !== "" && !naLista;
-              const modeloAtivo = !modoManual ? opcoesBoloes.find((o) => o.id === idModeloLinha(b)) : null;
-              const rowStyle = modeloAtivo
-                ? getLoteriaRowStyle(modeloAtivo.nome || modeloAtivo.concurso)
-                : b.mod
-                  ? getLoteriaRowStyle(getModalidade(b.mod)?.nome ?? "")
-                  : undefined;
-              return (
-                <div key={idx} style={rowStyle} className="p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-muted-foreground">Bolão {idx + 1}</span>
-                    <button
-                      onClick={() => setBolaoExcluirIdx(idx)}
-                      className="text-xs text-destructive hover:underline"
-                    >
-                      Remover
-                    </button>
-                  </div>
-
-                  <select
-                    value={modoManual ? "__outro__" : idModeloLinha(b)}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (v === "__outro__") {
-                        setBolao(idx, "concurso", " ");
-                        setBolao(idx, "numeroAuto", false);
-                      } else {
-                        escolherBolao(idx, v);
-                      }
-                    }}
-                    className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">Selecione o bolão...</option>
-                    {opcoesBoloes.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.concurso} — {brl(o.valorCota)}/cota
-                      </option>
-                    ))}
-                    <option value="__outro__">Outro (nome livre)</option>
-                  </select>
-
-                  {modoManual && (
-                    <input
-                      value={b.concurso}
-                      onChange={(e) => setBolao(idx, "concurso", e.target.value)}
-                      placeholder="Nome do bolão"
-                      className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  )}
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <label className="flex flex-col gap-1">
-                      <span className="text-[11px] font-medium text-muted-foreground">Nº Concurso</span>
-                      <input
-                        value={b.numero ?? ""}
-                        onChange={(e) => {
-                          setBolao(idx, "numero", e.target.value);
-                          setBolao(idx, "numeroAuto", false);
-                        }}
-                        placeholder="—"
-                        className="h-10 w-full rounded-lg border border-input bg-background px-2 text-center text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1">
-                      <span className="text-[11px] font-medium text-muted-foreground">Valor cota</span>
-                      <input
-                        inputMode="decimal"
-                        value={b.valor}
-                        onChange={(e) => setBolao(idx, "valor", e.target.value)}
-                        placeholder="0,00"
-                        className="h-10 w-full rounded-lg border border-input bg-background px-2 text-center text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1">
-                      <span className="text-[11px] font-medium text-muted-foreground">Quant.</span>
-                      <input
-                        inputMode="numeric"
-                        value={b.quant}
-                        onChange={(e) => setBolao(idx, "quant", e.target.value)}
-                        placeholder="0"
-                        className="h-10 w-full rounded-lg border border-input bg-background px-2 text-center text-sm font-bold text-foreground outline-none focus:ring-2 focus:ring-ring"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 rounded-lg bg-secondary/50 px-3 py-2 text-xs">
-                    <label className="flex items-center gap-1">
-                      <span className="text-muted-foreground">Taxa:</span>
-                      <input
-                        inputMode="decimal"
-                        value={b.taxa}
-                        onChange={(e) => setBolao(idx, "taxa", e.target.value)}
-                        placeholder="0,00"
-                        className="h-8 w-20 rounded-md border border-input bg-background px-2 text-right text-xs text-foreground outline-none focus:ring-2 focus:ring-ring"
-                      />
-                    </label>
-                    <span className="font-bold text-foreground">Subtotal: {brl(num(b.valor) * num(b.quant))}</span>
-                  </div>
-                </div>
-              );
-            })}
-
-            {boloes.length > 0 && (
-              <div className="flex items-center justify-between bg-secondary/50 px-4 py-3">
-                <span className="text-xs font-semibold uppercase text-muted-foreground">Total</span>
-                <div className="flex gap-4 text-xs font-bold text-foreground">
-                  <span>{totalQuant} cotas</span>
-                  <span>{brl(totalValor)}</span>
-                  <span>Taxa: {brl(totalTaxa)}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="px-4 py-3">
-            <button
-              onClick={() => setBoloes((bs) => [...bs, bolaoVazio()])}
-              className="inline-flex h-11 sm:h-8 items-center justify-center gap-1 rounded-lg border-2 border-dashed border-border bg-background px-4 text-sm font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground w-full sm:w-auto"
-            >
-              + Adicionar bolão
-            </button>
-          </div>
-        </section>
+        <ControleBoloesFechamento
+          boloes={boloes}
+          opcoes={opcoesBoloes}
+          setBolao={setBolao}
+          escolherBolao={escolherBolao}
+          setBoloes={setBoloes}
+          onRemover={setBolaoExcluirIdx}
+          totalValor={totalValor}
+          totalTaxa={totalTaxa}
+          totalQuant={totalQuant}
+        />
 
 
 
@@ -1259,90 +964,15 @@ function Fechamento() {
 
       </div>
 
-      {/* Sticky action bar - sits above BottomNav on mobile */}
-      <div className="fixed left-0 right-0 z-40 bottom-[60px] md:bottom-0 border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 shadow-lg">
-        {(salvando || gerandoPdf) && (
-          <div className="mx-auto max-w-3xl px-4 pt-2">
-            <p className="text-xs text-muted-foreground" role="status" aria-live="polite">
-              {salvando ? "Gerando o PDF e salvando no historico..." : "Montando o PDF..."}
-            </p>
-          </div>
-        )}
-
-        {/* Desktop layout */}
-        <div className="hidden md:flex mx-auto max-w-3xl items-center justify-between gap-2 px-4 py-2">
-          {isAdmin && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => window.print()}
-                className="inline-flex h-10 items-center rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-              >
-                Imprimir
-              </button>
-              <button
-                onClick={() => void compartilharPdf()}
-                disabled={gerandoPdf || salvando}
-                className="inline-flex h-10 items-center rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
-              >
-                {gerandoPdf ? (
-                  <span className="inline-flex items-center gap-2">
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    Gerando PDF...
-                  </span>
-                ) : (
-                  "Compartilhar PDF"
-                )}
-              </button>
-            </div>
-          )}
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={() => setLimparConfirm(true)}
-              className="inline-flex h-10 items-center rounded-md border border-destructive/30 bg-destructive/5 px-4 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
-            >
-              Limpar
-            </button>
-            <button
-              onClick={() => void salvar()}
-              disabled={salvando || gerandoPdf}
-              className="inline-flex h-11 items-center rounded-md bg-emerald-600 px-6 text-sm font-bold text-white transition-colors hover:bg-emerald-700 disabled:opacity-60 shadow-md"
-            >
-              {salvando ? (
-                <span className="inline-flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  Salvando...
-                </span>
-              ) : (
-                "Salvar e enviar"
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile layout - save + limpar side by side */}
-        <div className="flex md:hidden items-center gap-2 px-4 py-3">
-          <button
-            onClick={() => void salvar()}
-            disabled={salvando || gerandoPdf}
-            className="flex-[2] h-12 flex items-center justify-center gap-2 rounded-lg bg-emerald-600 text-base font-bold text-white transition-colors hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-60 shadow-md"
-          >
-            {salvando ? (
-              <>
-                <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                Salvando...
-              </>
-            ) : (
-              "Salvar e enviar"
-            )}
-          </button>
-          <button
-            onClick={() => setLimparConfirm(true)}
-            className="flex-1 h-10 flex items-center justify-center rounded-lg border border-destructive/30 bg-destructive/5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 active:bg-destructive/10"
-          >
-            Limpar
-          </button>
-        </div>
-      </div>
+      <BarraAcoesFechamento
+        salvando={salvando}
+        gerandoPdf={gerandoPdf}
+        isAdmin={isAdmin}
+        onImprimir={() => window.print()}
+        onCompartilhar={() => void compartilharPdf()}
+        onLimpar={() => setLimparConfirm(true)}
+        onSalvar={() => void salvar()}
+      />
 
       {limparConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">

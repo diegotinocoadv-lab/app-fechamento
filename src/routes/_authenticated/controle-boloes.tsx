@@ -1,8 +1,21 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AppNav } from "@/components/AppNav";
+import { DetalheBolao } from "@/components/boloes/DetalheBolao";
+import { RelatorioOperadoras } from "@/components/boloes/RelatorioOperadoras";
+import { VendasPeriodo } from "@/components/boloes/VendasPeriodo";
+import {
+  dataBr,
+  input,
+  rotuloSituacao,
+  type Linha,
+  type RelDia,
+  type RelOperador,
+  type RelTotal,
+  type VendaEstoque,
+} from "@/components/boloes/comum";
 import { controleBoloes } from "@/lib/controle-boloes.functions";
 import {
   ajustarCotasEstoque,
@@ -17,7 +30,8 @@ import { brl, num } from "@/lib/fechamento-campos";
 import { MODALIDADES_LOTERIA } from "@/lib/loterias-sorteio";
 import { relatorioVendasBoloes } from "@/lib/lancamentos-simples.functions";
 import { listarUsuarios, meuAcesso } from "@/lib/usuarios.functions";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+
 
 export const Route = createFileRoute("/_authenticated/controle-boloes")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -49,7 +63,6 @@ const ultimoDiaMes = (mes: string) => {
   const ultimo = new Date(ano!, (m ?? 1), 0).getDate();
   return `${mes}-${String(ultimo).padStart(2, "0")}`;
 };
-const dataBr = (d: string) => (d ? d.split("-").reverse().join("/") : "—");
 
 const nomeMes = (ref: string) => {
   const [ano, m] = ref.slice(0, 7).split("-");
@@ -59,29 +72,6 @@ const nomeMes = (ref: string) => {
   ];
   const idx = Number(m) - 1;
   return `${nomes[idx] ?? m} ${ano}`;
-};
-
-const input =
-  "h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring";
-
-type Linha = {
-  nome: string;
-  concurso: string;
-  valorCota: number;
-  taxa: number;
-  data: string;
-  observacoes: string;
-  cotas: number;
-  vendidas: number;
-  disponiveis: number;
-  situacao: string;
-  finalizado: boolean;
-  ids: string[];
-  vendidasLoja: number;
-  vendidasMkp: number;
-  ultimaVenda: string;
-  celulas: Record<string, number>;
-  porDia: Array<{ data: string; coluna: string; cotas: number; operador: string; canal: string }>;
 };
 
 type Aviso = { tipo: "ok" | "erro"; texto: string };
@@ -372,16 +362,7 @@ function ControleBoloes() {
   }, [detalhe]);
 
   const vendasListadas = useMemo(() => {
-    const vs = (vendasQ.data ?? []) as Array<{
-      id: string;
-      nome: string;
-      concurso: string;
-      quantidade: number;
-      canal: "LOJA" | "MARKETPLACE";
-      data: string;
-      operador: string;
-      valorTotal: number;
-    }>;
+    const vs = (vendasQ.data ?? []) as VendaEstoque[];
     if (!vendaFiltro) return vs;
     const [nome, concurso] = vendaFiltro.split("|");
     return vs.filter((v) => v.nome === nome && (v.concurso ?? "") === (concurso ?? ""));
@@ -390,24 +371,8 @@ function ControleBoloes() {
   const totalVendasListadas = vendasListadas.reduce((s, v) => s + v.quantidade, 0);
   const valorVendasListadas = vendasListadas.reduce((s, v) => s + v.valorTotal, 0);
 
-  type RelDia = {
-    data: string;
-    cotas: number;
-    valor: number;
-    taxa: number;
-    mkpCotas: number;
-    mkpValor: number;
-  };
-  type RelOp = {
-    operadorId: string;
-    operador: string;
-    cotas: number;
-    valor: number;
-    taxa: number;
-    dias: RelDia[];
-  };
-  const relOps = (relatorioQ.data?.operadores ?? []) as RelOp[];
-  const relTotal = relatorioQ.data?.total ?? {
+  const relOps = (relatorioQ.data?.operadores ?? []) as RelOperador[];
+  const relTotal: RelTotal = relatorioQ.data?.total ?? {
     cotas: 0,
     valor: 0,
     taxa: 0,
@@ -452,9 +417,6 @@ function ControleBoloes() {
           `Todas as cotas foram vendidas. Depois de finalizar não dá para vender nem reativar.`;
     if (window.confirm(texto)) finalizarMut.mutate(l);
   };
-
-  const rotuloSituacao = (l: { situacao: string }) =>
-    l.situacao === "finalizado" ? "Finalizado" : l.situacao === "encerrado" ? "Encerrado" : "Em aberto";
 
   return (
     <main className="min-h-screen bg-background px-4 pb-6 pt-4">
@@ -583,337 +545,52 @@ function ControleBoloes() {
         </section>
 
         {vendasAberto && (
-          <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-sm font-bold text-foreground">Vendas do período</h2>
-              <select
-                value={vendaFiltro}
-                onChange={(e) => setVendaFiltro(e.target.value)}
-                className={`${input} min-w-52`}
-              >
-                <option value="">Todos os bolões</option>
-                {porConcurso.map((g) => (
-                  <option key={g.chave} value={g.chave}>
-                    {g.titulo}
-                  </option>
-                ))}
-              </select>
-              <span className="ml-auto text-xs text-muted-foreground">
-                {vendasListadas.length} venda(s) · {totalVendasListadas} cota(s) ·{" "}
-                {brl(valorVendasListadas)}
-              </span>
-            </div>
-            {vendasQ.isPending ? (
-              <div className="mt-3 h-20 animate-pulse rounded-lg bg-secondary" />
-            ) : vendasListadas.length === 0 ? (
-              <p className="mt-3 text-sm text-muted-foreground">Nenhuma venda no período.</p>
-            ) : (
-              <div className="mt-3 max-h-80 overflow-y-auto">
-                <table className="w-full border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="px-2 py-1.5 text-left text-[11px] uppercase text-muted-foreground">Data</th>
-                      <th className="px-2 py-1.5 text-left text-[11px] uppercase text-muted-foreground">Bolão</th>
-                      <th className="px-2 py-1.5 text-left text-[11px] uppercase text-muted-foreground">Operadora</th>
-                      <th className="px-2 py-1.5 text-left text-[11px] uppercase text-muted-foreground">Canal</th>
-                      <th className="px-2 py-1.5 text-right text-[11px] uppercase text-muted-foreground">Qtd</th>
-                      <th className="px-2 py-1.5 text-right text-[11px] uppercase text-muted-foreground">R$</th>
-                      {admin && <th className="px-2 py-1.5 text-right text-[11px] uppercase text-muted-foreground">—</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vendasListadas.map((v) => (
-                      <tr key={v.id} className="border-b border-border/50">
-                        <td className="px-2 py-1.5">{dataBr(v.data)}</td>
-                        <td className="px-2 py-1.5">
-                          {v.nome}
-                          {v.concurso ? ` · ${v.concurso}` : ""}
-                        </td>
-                        <td className="px-2 py-1.5">{v.operador}</td>
-                        <td className="px-2 py-1.5">{v.canal === "MARKETPLACE" ? "MKP" : "Loja"}</td>
-                        <td className="px-2 py-1.5 text-right font-semibold">{v.quantidade}</td>
-                        <td className="px-2 py-1.5 text-right">{brl(v.valorTotal)}</td>
-                        {admin && (
-                          <td className="px-2 py-1.5 text-right">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (window.confirm(`Excluir venda de ${v.quantidade} cota(s) de ${v.nome}? O lançamento vinculado é ajustado junto.`)) {
-                                  estornoMut.mutate(v.id);
-                                }
-                              }}
-                              className="text-xs font-medium text-destructive hover:underline"
-                            >
-                              Excluir
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+          <VendasPeriodo
+            admin={admin}
+            filtro={vendaFiltro}
+            onFiltro={setVendaFiltro}
+            opcoes={porConcurso}
+            vendas={vendasListadas}
+            carregando={vendasQ.isPending}
+            totalCotas={totalVendasListadas}
+            totalValor={valorVendasListadas}
+            onExcluir={(id) => estornoMut.mutate(id)}
+          />
         )}
 
         {relatorioAberto && (
-          <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-sm font-bold text-foreground">
-                Relatório por operadora — {nomeMes(de)}
-              </h2>
-              {admin && (
-                <select
-                  value={filtroOperador}
-                  onChange={(e) => setFiltroOperador(e.target.value)}
-                  className={`${input} min-w-40`}
-                >
-                  <option value="">Todas</option>
-                  {(usuariosQ.data ?? []).map(
-                    (u: { id: string; nome: string | null; email: string | null }) => (
-                      <option key={u.id} value={u.id}>
-                        {u.nome || u.email}
-                      </option>
-                    ),
-                  )}
-                </select>
-              )}
-              {relatorioQ.data && (
-                <span className="ml-auto text-xs text-muted-foreground">
-                  {(relatorioQ.data as { lancamentos?: number }).lancamentos ?? 0} lançamento(s)
-                </span>
-              )}
-            </div>
-
-            {relatorioQ.isPending ? (
-              <div className="mt-3 h-20 animate-pulse rounded-lg bg-secondary" />
-            ) : relatorioQ.isError ? (
-              <p className="mt-3 text-sm text-destructive">
-                {relatorioQ.error instanceof Error
+          <RelatorioOperadoras
+            admin={admin}
+            titulo={nomeMes(de)}
+            usuarios={
+              (usuariosQ.data ?? []) as Array<{
+                id: string;
+                nome: string | null;
+                email: string | null;
+              }>
+            }
+            filtro={filtroOperador}
+            onFiltro={setFiltroOperador}
+            carregando={relatorioQ.isPending}
+            erro={
+              relatorioQ.isError
+                ? relatorioQ.error instanceof Error
                   ? relatorioQ.error.message
-                  : "Falha ao carregar o relatório."}
-              </p>
-            ) : relOps.length === 0 ? (
-              <p className="mt-3 text-sm text-muted-foreground">
-                Nenhuma venda de bolão neste período.
-              </p>
-            ) : (
-              <div className="mt-3 flex flex-col gap-3">
-                <p className="text-xs text-muted-foreground">
-                  Total de taxas no mês:{" "}
-                  <span className="font-semibold text-foreground">{brl(relTotal.taxa)}</span>
-                  {" "}· operadoras {brl(relTaxaLojas)} · MKP {brl(relTotal.mkpTaxa)}{" "}
-                  <span className="text-muted-foreground/70">
-                    (MKP é operadora à parte e não soma nas de loja)
-                  </span>
-                </p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {relLojas.map((op) => {
-                    const ativo = admin && filtroOperador === op.operadorId;
-                    return (
-                      <button
-                        key={op.operadorId}
-                        type="button"
-                        onClick={() => {
-                          if (!admin) return;
-                          setFiltroOperador(ativo ? "" : op.operadorId);
-                          setAbertoOp(null);
-                        }}
-                        className={`rounded-lg border px-3 py-2 text-left transition-colors ${
-                          ativo
-                            ? "border-primary bg-primary/5"
-                            : "border-border/60 bg-secondary/30 hover:bg-secondary/60"
-                        }`}
-                      >
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          {op.operador}
-                        </p>
-                        <p className="text-lg font-bold text-foreground">{brl(op.valor)}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {op.cotas} cota(s) · taxas {brl(op.taxa)}
-                        </p>
-                      </button>
-                    );
-                  })}
-                  {relMkp && (
-                    <div className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-left dark:border-sky-800 dark:bg-sky-950/30">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
-                        MKP (Marketplace)
-                      </p>
-                      <p className="text-lg font-bold text-sky-900 dark:text-sky-100">
-                        {brl(relMkp.valor)}
-                      </p>
-                      <p className="text-xs text-sky-700/80 dark:text-sky-300/80">
-                        {relMkp.cotas} cota(s) · taxas {brl(relMkp.taxa)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="px-3 py-2.5" />
-                      <th className="px-3 py-2.5">Operadora</th>
-                      <th className="px-3 py-2.5 text-right">Cotas</th>
-                      <th className="px-3 py-2.5 text-right">Valor</th>
-                      <th className="px-3 py-2.5 text-right">Taxa</th>
-                      <th className="px-3 py-2.5 text-right">Dias</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {relOps.map((op) => {
-                      const aberto = abertoOp === op.operadorId;
-                      const ehMkp = op.operadorId === "__mkp__";
-                      return (
-                        <Fragment key={op.operadorId}>
-                          <tr
-                            className={`cursor-pointer border-b border-border/60 transition-colors hover:bg-secondary/30 ${
-                              ehMkp ? "bg-sky-50/60 dark:bg-sky-950/20" : ""
-                            }`}
-                            onClick={() => setAbertoOp(aberto ? null : op.operadorId)}
-                          >
-                            <td className="px-3 py-2.5 text-muted-foreground">
-                              {aberto ? (
-                                <ChevronDown className="h-4 w-4" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4" />
-                              )}
-                            </td>
-                            <td
-                              className={`px-3 py-2.5 font-medium ${
-                                ehMkp
-                                  ? "text-sky-700 dark:text-sky-300"
-                                  : "text-foreground"
-                              }`}
-                            >
-                              {ehMkp ? "MKP (Marketplace)" : op.operador}
-                            </td>
-                            <td className="px-3 py-2.5 text-right font-medium">{op.cotas}</td>
-                            <td className="px-3 py-2.5 text-right font-semibold text-foreground">
-                              {brl(op.valor)}
-                            </td>
-                            <td className="px-3 py-2.5 text-right font-semibold text-violet-600 dark:text-violet-400">
-                              {brl(op.taxa)}
-                            </td>
-                            <td className="px-3 py-2.5 text-right text-muted-foreground">
-                              {op.dias.length}
-                            </td>
-                          </tr>
-                          {aberto && (
-                            <tr>
-                              <td colSpan={6} className="border-b border-border/60 bg-secondary/30 px-3 py-2">
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                  Dia a dia — {ehMkp ? "MKP (Marketplace)" : op.operador}
-                                </p>
-                                <div className="overflow-x-auto rounded-md border border-border bg-card">
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
-                                        <th className="px-3 py-2">Data</th>
-                                        <th className="px-3 py-2 text-right">Cotas</th>
-                                        <th className="px-3 py-2 text-right">Valor</th>
-                                        <th className="px-3 py-2 text-right">Taxa</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {op.dias.map((d) => (
-                                        <tr key={d.data} className="border-b border-border/50 last:border-0">
-                                          <td className="px-3 py-1.5 text-foreground">{dataBr(d.data)}</td>
-                                          <td className="px-3 py-1.5 text-right">{d.cotas}</td>
-                                          <td className="px-3 py-1.5 text-right font-medium">
-                                            {brl(d.valor)}
-                                          </td>
-                                          <td className="px-3 py-1.5 text-right font-medium text-violet-600 dark:text-violet-400">
-                                            {brl(d.taxa)}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                    <tfoot>
-                                      <tr className="border-t-2 border-border bg-secondary/50 text-xs font-bold">
-                                        <td className="px-3 py-2">Total</td>
-                                        <td className="px-3 py-2 text-right">{op.cotas}</td>
-                                        <td className="px-3 py-2 text-right">{brl(op.valor)}</td>
-                                        <td className="px-3 py-2 text-right">{brl(op.taxa)}</td>
-                                      </tr>
-                                    </tfoot>
-                                  </table>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-border bg-secondary/50 text-sm font-bold">
-                      <td className="px-3 py-2.5" />
-                      <td className="px-3 py-2.5 text-foreground">TOTAL DO MÊS</td>
-                      <td className="px-3 py-2.5 text-right text-foreground">{relTotal.cotas}</td>
-                      <td className="px-3 py-2.5 text-right text-foreground">{brl(relTotal.valor)}</td>
-                      <td className="px-3 py-2.5 text-right text-violet-600 dark:text-violet-400">
-                        {brl(relTotal.taxa)}
-                      </td>
-                      <td className="px-3 py-2.5" />
-                    </tr>
-                  </tfoot>
-                </table>
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Listagem por dia — total acumulado no mês
-                  </p>
-                  <div className="mt-1 overflow-x-auto rounded-md border border-border bg-card">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
-                          <th className="px-3 py-2">Data</th>
-                          <th className="px-3 py-2 text-right">Cotas</th>
-                          <th className="px-3 py-2 text-right">Valor do dia</th>
-                          <th className="px-3 py-2 text-right">MKP</th>
-                          <th className="px-3 py-2 text-right">Taxa</th>
-                          <th className="px-3 py-2 text-right">Acumulado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {relDias.map((d) => (
-                          <tr key={d.data} className="border-b border-border/50 last:border-0">
-                            <td className="px-3 py-1.5 text-foreground">{dataBr(d.data)}</td>
-                            <td className="px-3 py-1.5 text-right">{d.cotas}</td>
-                            <td className="px-3 py-1.5 text-right font-medium">{brl(d.valor)}</td>
-                            <td className="px-3 py-1.5 text-right font-medium text-sky-600 dark:text-sky-400">
-                              {brl(d.mkpValor)}
-                            </td>
-                            <td className="px-3 py-1.5 text-right font-medium text-violet-600 dark:text-violet-400">
-                              {brl(d.taxa)}
-                            </td>
-                            <td className="px-3 py-1.5 text-right font-semibold text-foreground">
-                              {brl(d.acumulado)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 border-border bg-secondary/50 text-xs font-bold">
-                          <td className="px-3 py-2">TOTAL DO MÊS</td>
-                          <td className="px-3 py-2 text-right">{relTotal.cotas}</td>
-                          <td className="px-3 py-2 text-right">{brl(relTotal.valor)}</td>
-                          <td className="px-3 py-2 text-right">{brl(relTotal.mkpValor)}</td>
-                          <td className="px-3 py-2 text-right">{brl(relTotal.taxa)}</td>
-                          <td className="px-3 py-2 text-right">{brl(relTotal.valor)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-          </section>
+                  : "Falha ao carregar o relatório."
+                : null
+            }
+            lancamentos={
+              (relatorioQ.data as { lancamentos?: number } | undefined)?.lancamentos ?? null
+            }
+            ops={relOps}
+            lojas={relLojas}
+            mkp={relMkp}
+            total={relTotal}
+            taxaOperadoras={relTaxaLojas}
+            dias={relDias}
+            abertoOp={abertoOp}
+            onAbertoOp={setAbertoOp}
+          />
         )}
 
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -1098,136 +775,22 @@ function ControleBoloes() {
       </div>
 
       {detalhe && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-xl">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="text-base font-semibold text-foreground">
-                {detalhe.cotas} cotas de {brl(detalhe.valorCota)}
-              </h3>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                  detalhe.situacao === "finalizado"
-                    ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                    : detalhe.situacao === "encerrado"
-                      ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
-                      : "bg-secondary text-muted-foreground"
-                }`}
-              >
-                {rotuloSituacao(detalhe)}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {detalhe.nome}
-              {detalhe.concurso ? ` · concurso ${detalhe.concurso}` : ""} · {detalhe.vendidas}{" "}
-              vendida(s) · {Math.max(0, detalhe.cotas - detalhe.vendidas)} disponível(is)
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Loja: {detalhe.vendidasLoja} · Marketplace: {detalhe.vendidasMkp}
-            </p>
-
-            {(detalhe.situacao === "encerrado" || detalhe.situacao === "finalizado") && (
-              <div className="mt-3 rounded-md border border-border/60 bg-secondary/20 p-2 text-sm">
-                <p className="font-semibold text-foreground">Resultado</p>
-                <p className="text-muted-foreground">
-                  Vendidas: {detalhe.vendidas} (Loja {detalhe.vendidasLoja} · MKP{" "}
-                  {detalhe.vendidasMkp}) · Sobra: {Math.max(0, detalhe.cotas - detalhe.vendidas)}{" "}
-                  cota(s) · Perda:{" "}
-                  {brl(Math.max(0, detalhe.cotas - detalhe.vendidas) * detalhe.valorCota)}
-                </p>
-              </div>
-            )}
-
-            {detalhe.porDia.length === 0 ? (
-              <p className="mt-4 text-sm text-muted-foreground">
-                Nenhuma venda registrada neste período.
-              </p>
-            ) : (
-              <div className="mt-3 max-h-64 space-y-3 overflow-y-auto">
-                {diasDoDetalhe.map(([dia, itens]) => (
-                  <div key={dia} className="rounded-md border border-border/60 bg-secondary/20 p-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {dataBr(dia)}
-                    </p>
-                    <ul className="mt-1 space-y-0.5">
-                      {itens.map((i, idx) => (
-                        <li
-                          key={`${i.coluna}-${idx}`}
-                          className="flex items-center justify-between gap-3 text-sm"
-                        >
-                          <span className="text-foreground">
-                            {nomeColuna.get(i.coluna) ?? i.coluna}
-                          </span>
-                          <span className="font-semibold text-foreground">{i.cotas} cota(s)</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              {detalhe.situacao !== "finalizado" && detalhe.disponiveis > 0 && (
-                <button
-                  type="button"
-                  onClick={() => abrirVenda(detalhe)}
-                  className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                >
-                  Vender
-                </button>
-              )}
-              {admin && (
-                <>
-                  {detalhe.situacao === "ativo" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (window.confirm("Encerrar este bolão? Vendas continuam aceitas (ex.: marketplace).")) {
-                          situacaoMut.mutate({ l: detalhe, para: "encerrado" });
-                        }
-                      }}
-                      className="h-9 rounded-md border border-input px-3 text-sm font-medium text-foreground hover:bg-accent"
-                    >
-                      Encerrar
-                    </button>
-                  )}
-                  {detalhe.situacao === "encerrado" && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => situacaoMut.mutate({ l: detalhe, para: "ativo" })}
-                        className="h-9 rounded-md border border-input px-3 text-sm font-medium text-foreground hover:bg-accent"
-                      >
-                        Reativar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => confirmarFinalizar(detalhe)}
-                        className="h-9 rounded-md border border-emerald-600 px-3 text-sm font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950"
-                      >
-                        Finalizar
-                      </button>
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => abrirCotas(detalhe)}
-                    className="h-9 rounded-md border border-input px-3 text-sm font-medium text-muted-foreground hover:bg-accent"
-                  >
-                    Ajustar cotas
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                onClick={() => setDetalhe(null)}
-                className="h-9 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground hover:bg-accent"
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
+        <DetalheBolao
+          detalhe={detalhe}
+          admin={admin}
+          dias={diasDoDetalhe}
+          nomeColuna={nomeColuna}
+          onFechar={() => setDetalhe(null)}
+          onVender={() => abrirVenda(detalhe)}
+          onEncerrar={() => {
+            if (window.confirm("Encerrar este bolão? Vendas continuam aceitas (ex.: marketplace).")) {
+              situacaoMut.mutate({ l: detalhe, para: "encerrado" });
+            }
+          }}
+          onReativar={() => situacaoMut.mutate({ l: detalhe, para: "ativo" })}
+          onFinalizar={() => confirmarFinalizar(detalhe)}
+          onAjustarCotas={() => abrirCotas(detalhe)}
+        />
       )}
 
       {vendaLinha && (

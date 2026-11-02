@@ -3,6 +3,12 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AppNav } from "@/components/AppNav";
+import { BolaoRapidoModal } from "@/components/lancar/BolaoRapidoModal";
+import {
+  LancamentosDoDia,
+  type LancamentoItem,
+} from "@/components/lancar/LancamentosDoDia";
+import { opcoesCampo, type ModeloBolao } from "@/components/lancar/comum";
 import { brl, num, SALDO_ITENS, VALOR_CAMPOS, saldoVazio, type Saldo, type SaldoKey } from "@/lib/fechamento-campos";
 import { listarEstoque } from "@/lib/estoque-boloes.functions";
 import { buscarProximoConcurso } from "@/lib/caixa-loterias.functions";
@@ -16,7 +22,7 @@ import {
 } from "@/lib/lancamentos-simples.functions";
 import { meuCaixa } from "@/lib/caixas.functions";
 import { listarUsuarios, meuAcesso } from "@/lib/usuarios.functions";
-import { Loader2, Trash2, Wallet, Banknote, Ticket, FileText } from "lucide-react";
+import { Loader2, Wallet, Banknote, Ticket, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/lancar")({
@@ -44,35 +50,6 @@ export const Route = createFileRoute("/_authenticated/lancar")({
 });
 
 /** Gaveta = itens do saldo final do caixa (prefixo saldo:); Caixa = campos de valores. */
-const OPCOES_GAVETA = SALDO_ITENS.map((i) => ({ key: `saldo:${i.key}`, label: i.label }));
-const OPCOES_CAIXA = VALOR_CAMPOS.map((c) => ({ key: c.key as string, label: c.label }));
-
-const OPCOES_RELATORIO = [{ key: "relatorio", label: "Relatório" }];
-
-const opcoesCampo = (tipo: TipoLancamento | null) =>
-  tipo === "GAVETA" ? OPCOES_GAVETA : tipo === "RELATORIO" ? OPCOES_RELATORIO : OPCOES_CAIXA;
-
-/** Rótulo do campo do fechamento a que o lançamento se refere. */
-const rotuloCampo = (key: string) =>
-  [...OPCOES_GAVETA, ...OPCOES_CAIXA, ...OPCOES_RELATORIO].find((c) => c.key === key)?.label ?? "";
-
-type ModeloBolao = {
-  id: string;
-  concurso: string;
-  /** Nome/modalidade do bolão (para cor); igual ao concurso nos modelos antigos. */
-  nome: string;
-  valorCota: number;
-  taxa: number;
-  /** Saldo disponível no estoque; null quando é modelo antigo sem estoque. */
-  disponiveis: number | null;
-  /** Concurso do estoque (pré-preenchido no modal). */
-  estoqueConcurso: string;
-};
-
-/** Nome do modelo de bolão a partir do campo bolao:<id>. */
-const rotuloBolao = (key: string, modelos: ModeloBolao[]) =>
-  modelos.find((m) => `bolao:${m.id}` === key)?.concurso ?? "";
-
 const hoje = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 
 function LancarPage() {
@@ -889,194 +866,37 @@ function LancarPage() {
           </section>
         )}
 
-        <section className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
-          <div className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold text-foreground">
-              Lançamentos do dia
-              {filtroOperador && (
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  (filtrado por operador)
-                </span>
-              )}
-              {lancamentos.length > 0 && (
-                <span className="ml-2 text-xs text-muted-foreground">({lancamentos.length})</span>
-              )}
-            </h2>
-          </div>
-          {q.isPending ? (
-            <div className="space-y-2 p-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-12 animate-pulse rounded bg-secondary" />
-              ))}
-            </div>
-          ) : q.isError ? (
-            <p className="p-4 text-sm text-destructive">
-              {q.error instanceof Error ? q.error.message : "Falha ao carregar."}
-            </p>
-          ) : lancamentos.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-8 text-center">
-              <Banknote className="h-8 w-8 text-muted-foreground/30" />
-              <p className="text-sm text-muted-foreground">Nenhum lançamento nesta data.</p>
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="px-3 py-2.5">Tipo</th>
-                  <th className="px-3 py-2.5">Campo</th>
-                  <th className="px-3 py-2.5 hidden sm:table-cell">Caixa</th>
-                  <th className="px-3 py-2.5 hidden sm:table-cell">Operador</th>
-                  <th className="px-3 py-2.5">Descrição</th>
-                  <th className="px-3 py-2.5 text-right">Valor</th>
-                  <th className="px-3 py-2.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {lancamentos.map((l) => (
-                  <tr key={l.id} className="border-b border-border/60 transition-colors hover:bg-secondary/30 last:border-0">
-                    <td className="px-3 py-2.5">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          l.tipo === "GAVETA"
-                            ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                            : l.tipo === "BOLAO"
-                              ? "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300"
-                              : l.tipo === "RELATORIO"
-                                ? "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200"
-                                : "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300"
-                        }`}
-                      >
-                        {l.tipo === "GAVETA"
-                          ? "Gaveta"
-                          : l.tipo === "BOLAO"
-                            ? "Bolão"
-                            : l.tipo === "RELATORIO"
-                              ? "Relatório"
-                              : "Caixa"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 font-medium text-foreground">
-                      {l.tipo === "BOLAO"
-                        ? rotuloBolao(l.campo, modelos) ||
-                          (l.campo === "bolao:manual" ? l.descricao : "") ||
-                          "Bolão"
-                        : rotuloCampo(l.campo) || "—"}
-                    </td>
-                    <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">{l.caixaNumero || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">{l.operador}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">
-                      {l.tipo === "BOLAO"
-                        ? l.campo === "bolao:manual"
-                          ? `${l.quantidade} cota${l.quantidade > 1 ? "s" : ""} · Taxa ${brl(l.taxa)}/cota`
-                          : `Concurso ${l.descricao || "—"} · ${l.quantidade} cota${l.quantidade > 1 ? "s" : ""}`
-                        : l.descricao || "—"}
-                    </td>
-                    <td className="px-3 py-2.5 text-right font-semibold text-foreground">
-                      {l.tipo === "BOLAO"
-                        ? `${brl(l.valor * l.quantidade)}${l.taxa > 0 ? ` · Taxa ${brl(l.taxa * l.quantidade)}` : ""}`
-                        : brl(l.valor)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      {(l.meu || q.data?.admin) && (
-                        <button
-                          type="button"
-                          onClick={() => setExcluirLanc(l.id)}
-                          className="inline-flex h-7 items-center gap-1 rounded-md border border-destructive/30 px-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                          Excluir
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
+        <LancamentosDoDia
+          lancamentos={lancamentos as LancamentoItem[]}
+          modelos={modelos}
+          carregando={q.isPending}
+          erro={
+            q.isError
+              ? q.error instanceof Error
+                ? q.error.message
+                : "Falha ao carregar."
+              : null
+          }
+          filtroOperador={filtroOperador}
+          admin={Boolean(q.data?.admin)}
+          onExcluir={setExcluirLanc}
+        />
       </div>
 
       {bolaoRapido && (
-        <>
-          <style>{`@keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }`}</style>
-          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-t-2xl sm:rounded-xl border border-border bg-card p-5 shadow-xl" style={{ animation: "slideUp 0.2s ease-out" }}>
-            <div className="flex items-center gap-3 mb-4">
-              <span className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: getLoteriaDotColor(bolaoRapido.nome || bolaoRapido.concurso) }} />
-              <div>
-                <h3 className="text-base font-bold text-foreground">{bolaoRapido.concurso}</h3>
-                <p className="text-sm text-muted-foreground">
-                  Cota {brl(bolaoRapido.valorCota)} · Taxa {brl(bolaoRapido.taxa)}
-                  {bolaoRapido.disponiveis !== null &&
-                    ` · ${bolaoRapido.disponiveis === 0 ? "esgotado" : `${bolaoRapido.disponiveis} disp.`}`}
-                </p>
-              </div>
-            </div>
-            <div className="grid gap-3">
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-muted-foreground">Nº do Concurso</span>
-                <input
-                  autoFocus
-                  inputMode="numeric"
-                  value={rapidoConcurso}
-                  onChange={(e) => setRapidoConcurso(e.target.value)}
-                  placeholder="Ex.: 5827"
-                  className="h-11 w-full rounded-lg border border-input bg-background px-3 text-base text-foreground outline-none focus:ring-2 focus:ring-ring"
-                />
-                {modRapido && qProximo.isLoading && (
-                  <span className="text-xs text-muted-foreground">Buscando concurso em vigência...</span>
-                )}
-                {vigente && rapidoConcurso === vigente && (
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400">
-                    Concurso em vigência da Caixa.
-                  </span>
-                )}
-                {vigente && rapidoConcurso !== vigente && (
-                  <button
-                    type="button"
-                    onClick={() => setRapidoConcurso(vigente)}
-                    className="text-left text-xs font-medium text-primary hover:underline"
-                  >
-                    Concurso em vigência: {vigente} — toque para usar
-                  </button>
-                )}
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-muted-foreground">Quantidade de cotas</span>
-                <input
-                  inputMode="numeric"
-                  value={rapidoQuant}
-                  onChange={(e) => setRapidoQuant(e.target.value)}
-                  placeholder="1"
-                  className="h-11 w-full rounded-lg border border-input bg-background px-3 text-center text-xl font-bold text-foreground outline-none focus:ring-2 focus:ring-ring"
-                />
-              </label>
-            </div>
-            {rapidoErro && (
-              <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {rapidoErro}
-              </div>
-            )}
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => void salvarRapido()}
-                disabled={rapidoSalvando}
-                className="flex-1 h-12 rounded-lg bg-primary text-base font-bold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
-              >
-                {rapidoSalvando ? "Salvando..." : "Confirmar"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setBolaoRapido(null)}
-                className="h-12 rounded-lg border border-input px-4 text-base font-medium text-foreground hover:bg-accent"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-        </>
+        <BolaoRapidoModal
+          bolao={bolaoRapido}
+          concurso={rapidoConcurso}
+          onConcurso={setRapidoConcurso}
+          quantidade={rapidoQuant}
+          onQuantidade={setRapidoQuant}
+          erro={rapidoErro}
+          salvando={rapidoSalvando}
+          vigente={vigente}
+          buscandoVigente={Boolean(modRapido) && qProximo.isLoading}
+          onConfirmar={() => void salvarRapido()}
+          onCancelar={() => setBolaoRapido(null)}
+        />
       )}
 
       {excluirLanc && (
