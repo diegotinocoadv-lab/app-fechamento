@@ -9,13 +9,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Sistema de fechamento de caixa da Lotérica Brasil da Sorte: saldo inicial e final, bolões, importação por foto e PDF em uma página.",
+          "Sistema de fechamento de caixa da Lotérica Brasil da Sorte: saldo inicial e final, bolões e PDF em uma página.",
       },
       { property: "og:title", content: "Fechamento de Caixa | Brasil da Sorte" },
       {
         property: "og:description",
         content:
-          "Registre o caixa do dia, importe o fechamento por foto e gere o PDF automaticamente.",
+          "Registre o caixa do dia e gere o PDF automaticamente.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -29,7 +29,7 @@ function Home() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      navigate({ to: data.session ? "/fechamento" : "/auth" });
+      navigate({ to: data.session ? "/inicio" : "/auth" });
     });
   }, [navigate]);
 

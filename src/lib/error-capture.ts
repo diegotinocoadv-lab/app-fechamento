@@ -5,7 +5,21 @@ let lastCapturedError: { error: unknown; at: number } | undefined;
 const TTL_MS = 5_000;
 
 function record(error: unknown) {
+  if (isAbort(error)) return;
+  // O HTTPError do h3 é a casca vazia que engole o erro original: dentro do TTL
+  // ele nunca sobrescreve um erro real já capturado (stack/mensagem verdadeiros).
+  if (
+    lastCapturedError &&
+    Date.now() - lastCapturedError.at < TTL_MS &&
+    isCascaH3(error)
+  ) {
+    return;
+  }
   lastCapturedError = { error, at: Date.now() };
+}
+
+function isCascaH3(error: unknown): boolean {
+  return error instanceof Error && error.message === "HTTPError";
 }
 
 // h3's HTTPError serializes to {"status":500,"unhandled":true,"message":"HTTPError"} —
@@ -49,11 +63,23 @@ function isErrorLike(value: unknown): value is Error {
   return value instanceof Error;
 }
 
+// O navegador cancelou a requisição (recarregar/sair) e o adaptador HTTP aborta o
+// signal. Não é falha da aplicação: nunca deve virar erro de runtime nem tela branca.
+function isAbort(value: unknown): boolean {
+  return (
+    value != null &&
+    typeof value === "object" &&
+    ((value as { name?: string }).name === "AbortError" ||
+      (value as { code?: string }).code === "ABORT_ERR")
+  );
+}
+
 // Wrap console.error so errors logged by any layer — including h3's internal
 // unhandled-error logging, which this file cannot hook directly — are both
 // recorded for consumeLastCapturedError and expanded before serialization.
 const originalConsoleError = console.error.bind(console);
 console.error = (...args: unknown[]) => {
+  if (args.some(isAbort)) return;
   const expanded = args.map((arg) => {
     if (!isErrorLike(arg)) return arg;
     record(arg);

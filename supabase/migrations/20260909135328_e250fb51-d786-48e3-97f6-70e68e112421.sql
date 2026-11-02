@@ -1,0 +1,1 @@
+ALTER TABLE public.lancamentos_simples ADD COLUMN IF NOT EXISTS campo text;

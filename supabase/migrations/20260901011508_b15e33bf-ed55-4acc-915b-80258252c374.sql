@@ -1,0 +1,1 @@
+ALTER TYPE public.conta_loterica ADD VALUE 'CONTA CARRO FORTE';

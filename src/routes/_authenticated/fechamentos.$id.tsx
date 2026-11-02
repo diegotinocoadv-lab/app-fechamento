@@ -1,10 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { AppNav } from "@/components/AppNav";
 import { linkPdfFechamento, obterFechamento } from "@/lib/fechamentos.functions";
+import { definirSituacaoCaixa } from "@/lib/caixas.functions";
+import { meuAcesso } from "@/lib/usuarios.functions";
 import { SALDO_ITENS, VALOR_CAMPOS, brl, brlSinal, classeDiferenca, type Bolao } from "@/lib/fechamento-campos";
+import { PenLine, Lock } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/fechamentos/$id")({
   head: () => ({
@@ -29,10 +32,21 @@ export const Route = createFileRoute("/_authenticated/fechamentos/$id")({
 
 function Detalhe() {
   const { id } = Route.useParams();
+  const qc = useQueryClient();
   const obter = useServerFn(obterFechamento);
   const gerarLink = useServerFn(linkPdfFechamento);
+  const definirSituacaoFn = useServerFn(definirSituacaoCaixa);
+  const acessoFn = useServerFn(meuAcesso);
   const [erroPdf, setErroPdf] = useState<string | null>(null);
   const [baixando, setBaixando] = useState(false);
+  const [confirmandoFechar, setConfirmandoFechar] = useState(false);
+
+  const { data: acesso } = useQuery({
+    queryKey: ["meu-acesso"],
+    queryFn: () => acessoFn({}),
+    staleTime: 5 * 60 * 1000,
+  });
+  const isAdmin = Boolean(acesso?.admin);
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["fechamento", id],
@@ -40,18 +54,40 @@ function Detalhe() {
     retry: false,
   });
 
+  const fecharMut = useMutation({
+    mutationFn: (caixaId: string) =>
+      definirSituacaoFn({ data: { id: caixaId, situacao: "conferido" as const } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["fechamentos"] });
+      void qc.invalidateQueries({ queryKey: ["caixas"] });
+      void qc.invalidateQueries({ queryKey: ["fechamento", id] });
+      setConfirmandoFechar(false);
+    },
+  });
+
   const baixarPdf = async () => {
     setErroPdf(null);
     setBaixando(true);
     try {
       const { url } = await gerarLink({ data: { id } });
-      window.open(url, "_blank", "noopener,noreferrer");
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error("Não foi possível baixar o arquivo do PDF.");
+      const blob = await resp.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `fechamento-${data?.data ?? id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
     } catch (err) {
       setErroPdf(err instanceof Error ? err.message : "Não foi possível abrir o PDF.");
     } finally {
       setBaixando(false);
     }
   };
+
 
   let dadosSalvos: Record<string, unknown> = {};
   try {
@@ -78,7 +114,7 @@ function Detalhe() {
               {data?.funcionario ? `Funcionário: ${data.funcionario}` : "Detalhe do fechamento salvo"}
             </p>
           </div>
-          <Link to="/fechamentos" className="text-sm font-medium text-primary underline">
+          <Link to="/fechamentos" search={{ filtroData: "", filtroOperador: "", filtroCaixa: "", filtroMes: "" }} className="text-sm font-medium text-primary underline">
             Voltar ao histórico
           </Link>
         </header>
@@ -201,15 +237,85 @@ function Detalhe() {
             )}
 
             <div className="flex flex-col items-start gap-2">
-              <button
-                onClick={() => void baixarPdf()}
-                disabled={baixando || !data.temPdf}
-                className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
-              >
-                {baixando ? "Gerando link..." : data.temPdf ? "Baixar PDF" : "Sem PDF salvo"}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {isAdmin && data?.caixaSituacao !== "conferido" && (
+                  <Link
+                    to="/fechamento"
+                    search={{ fechamentoId: id }}
+                    className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-bold text-white transition-colors hover:bg-emerald-700 shadow-md"
+                  >
+                    <PenLine className="h-4 w-4" />
+                    Corrigir fechamento
+                  </Link>
+                )}
+                {isAdmin && data?.caixaSituacao !== "conferido" && data?.caixaId && (
+                  <button
+                    onClick={() => setConfirmandoFechar(true)}
+                    className="inline-flex h-10 items-center gap-2 rounded-md bg-amber-600 px-4 text-sm font-bold text-white transition-colors hover:bg-amber-700 shadow-md"
+                  >
+                    <Lock className="h-4 w-4" />
+                    Fechar definitivamente
+                  </button>
+                )}
+                {data?.caixaSituacao === "conferido" && (
+                  <span className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-500/10 px-4 text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                    <Lock className="h-4 w-4" />
+                    Fechado e conferido
+                  </span>
+                )}
+                <button
+                  onClick={() => void baixarPdf()}
+                  disabled={baixando || !data.temPdf}
+                  className="inline-flex h-10 items-center rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-60"
+                >
+                  {baixando ? "Gerando link..." : data.temPdf ? "Baixar PDF" : "Sem PDF salvo"}
+                </button>
+              </div>
               {erroPdf && <p className="text-sm text-destructive">{erroPdf}</p>}
             </div>
+
+            {confirmandoFechar && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+                <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10">
+                      <Lock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">
+                        Fechar definitivamente
+                      </h2>
+                      <p className="text-xs text-muted-foreground">
+                        {data?.funcionario} — {data?.caixaNumero || "Caixa"} — {data?.data?.split("-").reverse().join("/")}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-4 rounded-md bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+                    Após confirmar, este fechamento <strong>não poderá mais ser modificado ou excluído</strong>.
+                  </p>
+                  <div className="mt-4 flex justify-end gap-2">
+                    <button
+                      onClick={() => setConfirmandoFechar(false)}
+                      className="h-9 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground hover:bg-accent"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => fecharMut.mutate(data!.caixaId!)}
+                      disabled={fecharMut.isPending}
+                      className="inline-flex h-9 items-center gap-2 rounded-md bg-amber-600 px-4 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      {fecharMut.isPending ? (
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      ) : (
+                        <Lock className="h-4 w-4" />
+                      )}
+                      Confirmar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

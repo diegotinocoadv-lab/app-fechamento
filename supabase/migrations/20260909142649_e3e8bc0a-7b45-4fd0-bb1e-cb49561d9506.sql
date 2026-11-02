@@ -1,0 +1,1 @@
+ALTER TYPE public.tipo_lancamento_simples ADD VALUE IF NOT EXISTS 'RELATORIO';

@@ -7,6 +7,7 @@ const novoUsuario = z.object({
   senha: z.string().min(6).max(72),
   nome: z.string().max(120).optional().default(""),
   admin: z.boolean().optional().default(false),
+  operadorId: z.string().uuid().nullable().optional().default(null),
 });
 
 const alvo = z.object({ userId: z.string().uuid() });
@@ -44,7 +45,7 @@ export const listarUsuarios = createServerFn({ method: "POST" })
 
     const { data: perfis, error } = await context.supabase
       .from("profiles")
-      .select("id, nome, email, created_at")
+      .select("id, nome, email, created_at, operador_id")
       .order("created_at", { ascending: true });
     if (error) throw new Error("Falha ao carregar usuários.");
 
@@ -80,7 +81,12 @@ export const criarUsuario = createServerFn({ method: "POST" })
     }
 
     const id = criado.data.user.id;
-    await supabaseAdmin.from("profiles").upsert({ id, nome: data.nome, email: data.email });
+    await supabaseAdmin.from("profiles").upsert({
+      id,
+      nome: data.nome,
+      email: data.email,
+      operador_id: data.operadorId ?? null,
+    });
     await supabaseAdmin.from("user_roles").delete().eq("user_id", id);
     await supabaseAdmin
       .from("user_roles")
@@ -126,5 +132,58 @@ export const removerUsuario = createServerFn({ method: "POST" })
     const { error } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
     if (error) throw new Error("Falha ao remover usuário.");
     await supabaseAdmin.from("profiles").delete().eq("id", data.userId);
+    return { ok: true };
+  });
+
+const editarPerfil = z.object({
+  userId: z.string().uuid(),
+  nome: z.string().max(120).optional().default(""),
+  email: z.string().email().max(200),
+  senha: z.string().max(72).optional().default(""),
+  role: z.enum(["admin", "operador"]),
+  operadorId: z.string().uuid().nullable().optional().default(null),
+});
+
+/** Edita o perfil de um operador: nome, e-mail, senha e papel (somente admin). */
+export const atualizarPerfil = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => editarPerfil.parse(input))
+  .handler(async ({ data, context }) => {
+    const { data: isAdmin } = await context.supabase.rpc("has_role", {
+      _user_id: context.userId,
+      _role: "admin",
+    });
+    if (!isAdmin) throw new Error("Apenas administradores podem editar perfis.");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const atualizacao: { email: string; password?: string; user_metadata: { nome: string } } = {
+      email: data.email,
+      user_metadata: { nome: data.nome },
+    };
+    if (data.senha) {
+      if (data.senha.length < 6) throw new Error("A senha deve ter pelo menos 6 caracteres.");
+      atualizacao.password = data.senha;
+    }
+    const atualizado = await supabaseAdmin.auth.admin.updateUserById(data.userId, atualizacao);
+    if (atualizado.error) throw new Error(atualizado.error.message);
+
+    const { error } = await supabaseAdmin
+      .from("profiles")
+      .upsert({
+        id: data.userId,
+        nome: data.nome || null,
+        email: data.email,
+        operador_id: data.operadorId ?? null,
+      });
+    if (error) throw new Error(`Falha ao salvar o perfil: ${error.message}`);
+
+    if (data.userId !== context.userId) {
+      await supabaseAdmin.from("user_roles").delete().eq("user_id", data.userId);
+      await supabaseAdmin
+        .from("user_roles")
+        .insert({ user_id: data.userId, role: data.role });
+    }
+
     return { ok: true };
   });

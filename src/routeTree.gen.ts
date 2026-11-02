@@ -12,9 +12,24 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedCaixasRouteImport } from './routes/_authenticated/caixas'
+import { Route as AuthenticatedConferenciaRouteImport } from './routes/_authenticated/conferencia'
+import { Route as AuthenticatedContasRouteImport } from './routes/_authenticated/contas'
+import { Route as AuthenticatedControleBoloesRouteImport } from './routes/_authenticated/controle-boloes'
+import { Route as AuthenticatedCriacaoBoloesRouteImport } from './routes/_authenticated/criacao-boloes'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedEstoqueRouteImport } from './routes/_authenticated/estoque'
 import { Route as AuthenticatedFechamentoRouteImport } from './routes/_authenticated/fechamento'
-import { Route as AuthenticatedImportarRouteImport } from './routes/_authenticated/importar'
+import { Route as AuthenticatedFiadoBaixasRouteImport } from './routes/_authenticated/fiado-baixas'
+import { Route as AuthenticatedFiadoClientesRouteImport } from './routes/_authenticated/fiado-clientes'
+import { Route as AuthenticatedFiadoDashboardRouteImport } from './routes/_authenticated/fiado-dashboard'
+import { Route as AuthenticatedFiadoFiadosRouteImport } from './routes/_authenticated/fiado-fiados'
+import { Route as AuthenticatedFiadoNovoRouteImport } from './routes/_authenticated/fiado-novo'
+import { Route as AuthenticatedInicioRouteImport } from './routes/_authenticated/inicio'
+import { Route as AuthenticatedLancarRouteImport } from './routes/_authenticated/lancar'
+import { Route as AuthenticatedMeuCaixaRouteImport } from './routes/_authenticated/meu-caixa'
 import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticated/usuarios'
+import { Route as AuthenticatedVendasBoloesRouteImport } from './routes/_authenticated/vendas-boloes'
 import { Route as AuthenticatedFechamentosIndexRouteImport } from './routes/_authenticated/fechamentos.index'
 import { Route as AuthenticatedFechamentosIdRouteImport } from './routes/_authenticated/fechamentos.$id'
 
@@ -32,14 +47,91 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedCaixasRoute = AuthenticatedCaixasRouteImport.update({
+  id: '/caixas',
+  path: '/caixas',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedConferenciaRoute =
+  AuthenticatedConferenciaRouteImport.update({
+    id: '/conferencia',
+    path: '/conferencia',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedContasRoute = AuthenticatedContasRouteImport.update({
+  id: '/contas',
+  path: '/contas',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedControleBoloesRoute =
+  AuthenticatedControleBoloesRouteImport.update({
+    id: '/controle-boloes',
+    path: '/controle-boloes',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedCriacaoBoloesRoute =
+  AuthenticatedCriacaoBoloesRouteImport.update({
+    id: '/criacao-boloes',
+    path: '/criacao-boloes',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedEstoqueRoute = AuthenticatedEstoqueRouteImport.update({
+  id: '/estoque',
+  path: '/estoque',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedFechamentoRoute = AuthenticatedFechamentoRouteImport.update({
   id: '/fechamento',
   path: '/fechamento',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedImportarRoute = AuthenticatedImportarRouteImport.update({
-  id: '/importar',
-  path: '/importar',
+const AuthenticatedFiadoBaixasRoute =
+  AuthenticatedFiadoBaixasRouteImport.update({
+    id: '/fiado-baixas',
+    path: '/fiado-baixas',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFiadoClientesRoute =
+  AuthenticatedFiadoClientesRouteImport.update({
+    id: '/fiado-clientes',
+    path: '/fiado-clientes',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFiadoDashboardRoute =
+  AuthenticatedFiadoDashboardRouteImport.update({
+    id: '/fiado-dashboard',
+    path: '/fiado-dashboard',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFiadoFiadosRoute =
+  AuthenticatedFiadoFiadosRouteImport.update({
+    id: '/fiado-fiados',
+    path: '/fiado-fiados',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedFiadoNovoRoute = AuthenticatedFiadoNovoRouteImport.update({
+  id: '/fiado-novo',
+  path: '/fiado-novo',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedInicioRoute = AuthenticatedInicioRouteImport.update({
+  id: '/inicio',
+  path: '/inicio',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedLancarRoute = AuthenticatedLancarRouteImport.update({
+  id: '/lancar',
+  path: '/lancar',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMeuCaixaRoute = AuthenticatedMeuCaixaRouteImport.update({
+  id: '/meu-caixa',
+  path: '/meu-caixa',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedUsuariosRoute = AuthenticatedUsuariosRouteImport.update({
@@ -47,6 +139,12 @@ const AuthenticatedUsuariosRoute = AuthenticatedUsuariosRouteImport.update({
   path: '/usuarios',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedVendasBoloesRoute =
+  AuthenticatedVendasBoloesRouteImport.update({
+    id: '/vendas-boloes',
+    path: '/vendas-boloes',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedFechamentosIndexRoute =
   AuthenticatedFechamentosIndexRouteImport.update({
     id: '/fechamentos/',
@@ -63,18 +161,48 @@ const AuthenticatedFechamentosIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/caixas': typeof AuthenticatedCaixasRoute
+  '/conferencia': typeof AuthenticatedConferenciaRoute
+  '/contas': typeof AuthenticatedContasRoute
+  '/controle-boloes': typeof AuthenticatedControleBoloesRoute
+  '/criacao-boloes': typeof AuthenticatedCriacaoBoloesRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/estoque': typeof AuthenticatedEstoqueRoute
   '/fechamento': typeof AuthenticatedFechamentoRoute
-  '/importar': typeof AuthenticatedImportarRoute
+  '/fiado-baixas': typeof AuthenticatedFiadoBaixasRoute
+  '/fiado-clientes': typeof AuthenticatedFiadoClientesRoute
+  '/fiado-dashboard': typeof AuthenticatedFiadoDashboardRoute
+  '/fiado-fiados': typeof AuthenticatedFiadoFiadosRoute
+  '/fiado-novo': typeof AuthenticatedFiadoNovoRoute
+  '/inicio': typeof AuthenticatedInicioRoute
+  '/lancar': typeof AuthenticatedLancarRoute
+  '/meu-caixa': typeof AuthenticatedMeuCaixaRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
+  '/vendas-boloes': typeof AuthenticatedVendasBoloesRoute
   '/fechamentos/$id': typeof AuthenticatedFechamentosIdRoute
   '/fechamentos/': typeof AuthenticatedFechamentosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/caixas': typeof AuthenticatedCaixasRoute
+  '/conferencia': typeof AuthenticatedConferenciaRoute
+  '/contas': typeof AuthenticatedContasRoute
+  '/controle-boloes': typeof AuthenticatedControleBoloesRoute
+  '/criacao-boloes': typeof AuthenticatedCriacaoBoloesRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/estoque': typeof AuthenticatedEstoqueRoute
   '/fechamento': typeof AuthenticatedFechamentoRoute
-  '/importar': typeof AuthenticatedImportarRoute
+  '/fiado-baixas': typeof AuthenticatedFiadoBaixasRoute
+  '/fiado-clientes': typeof AuthenticatedFiadoClientesRoute
+  '/fiado-dashboard': typeof AuthenticatedFiadoDashboardRoute
+  '/fiado-fiados': typeof AuthenticatedFiadoFiadosRoute
+  '/fiado-novo': typeof AuthenticatedFiadoNovoRoute
+  '/inicio': typeof AuthenticatedInicioRoute
+  '/lancar': typeof AuthenticatedLancarRoute
+  '/meu-caixa': typeof AuthenticatedMeuCaixaRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
+  '/vendas-boloes': typeof AuthenticatedVendasBoloesRoute
   '/fechamentos/$id': typeof AuthenticatedFechamentosIdRoute
   '/fechamentos': typeof AuthenticatedFechamentosIndexRoute
 }
@@ -83,9 +211,24 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/caixas': typeof AuthenticatedCaixasRoute
+  '/_authenticated/conferencia': typeof AuthenticatedConferenciaRoute
+  '/_authenticated/contas': typeof AuthenticatedContasRoute
+  '/_authenticated/controle-boloes': typeof AuthenticatedControleBoloesRoute
+  '/_authenticated/criacao-boloes': typeof AuthenticatedCriacaoBoloesRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/estoque': typeof AuthenticatedEstoqueRoute
   '/_authenticated/fechamento': typeof AuthenticatedFechamentoRoute
-  '/_authenticated/importar': typeof AuthenticatedImportarRoute
+  '/_authenticated/fiado-baixas': typeof AuthenticatedFiadoBaixasRoute
+  '/_authenticated/fiado-clientes': typeof AuthenticatedFiadoClientesRoute
+  '/_authenticated/fiado-dashboard': typeof AuthenticatedFiadoDashboardRoute
+  '/_authenticated/fiado-fiados': typeof AuthenticatedFiadoFiadosRoute
+  '/_authenticated/fiado-novo': typeof AuthenticatedFiadoNovoRoute
+  '/_authenticated/inicio': typeof AuthenticatedInicioRoute
+  '/_authenticated/lancar': typeof AuthenticatedLancarRoute
+  '/_authenticated/meu-caixa': typeof AuthenticatedMeuCaixaRoute
   '/_authenticated/usuarios': typeof AuthenticatedUsuariosRoute
+  '/_authenticated/vendas-boloes': typeof AuthenticatedVendasBoloesRoute
   '/_authenticated/fechamentos/$id': typeof AuthenticatedFechamentosIdRoute
   '/_authenticated/fechamentos/': typeof AuthenticatedFechamentosIndexRoute
 }
@@ -94,18 +237,48 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/caixas'
+    | '/conferencia'
+    | '/contas'
+    | '/controle-boloes'
+    | '/criacao-boloes'
+    | '/dashboard'
+    | '/estoque'
     | '/fechamento'
-    | '/importar'
+    | '/fiado-baixas'
+    | '/fiado-clientes'
+    | '/fiado-dashboard'
+    | '/fiado-fiados'
+    | '/fiado-novo'
+    | '/inicio'
+    | '/lancar'
+    | '/meu-caixa'
     | '/usuarios'
+    | '/vendas-boloes'
     | '/fechamentos/$id'
     | '/fechamentos/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
+    | '/caixas'
+    | '/conferencia'
+    | '/contas'
+    | '/controle-boloes'
+    | '/criacao-boloes'
+    | '/dashboard'
+    | '/estoque'
     | '/fechamento'
-    | '/importar'
+    | '/fiado-baixas'
+    | '/fiado-clientes'
+    | '/fiado-dashboard'
+    | '/fiado-fiados'
+    | '/fiado-novo'
+    | '/inicio'
+    | '/lancar'
+    | '/meu-caixa'
     | '/usuarios'
+    | '/vendas-boloes'
     | '/fechamentos/$id'
     | '/fechamentos'
   id:
@@ -113,9 +286,24 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/caixas'
+    | '/_authenticated/conferencia'
+    | '/_authenticated/contas'
+    | '/_authenticated/controle-boloes'
+    | '/_authenticated/criacao-boloes'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/estoque'
     | '/_authenticated/fechamento'
-    | '/_authenticated/importar'
+    | '/_authenticated/fiado-baixas'
+    | '/_authenticated/fiado-clientes'
+    | '/_authenticated/fiado-dashboard'
+    | '/_authenticated/fiado-fiados'
+    | '/_authenticated/fiado-novo'
+    | '/_authenticated/inicio'
+    | '/_authenticated/lancar'
+    | '/_authenticated/meu-caixa'
     | '/_authenticated/usuarios'
+    | '/_authenticated/vendas-boloes'
     | '/_authenticated/fechamentos/$id'
     | '/_authenticated/fechamentos/'
   fileRoutesById: FileRoutesById
@@ -149,6 +337,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/caixas': {
+      id: '/_authenticated/caixas'
+      path: '/caixas'
+      fullPath: '/caixas'
+      preLoaderRoute: typeof AuthenticatedCaixasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/conferencia': {
+      id: '/_authenticated/conferencia'
+      path: '/conferencia'
+      fullPath: '/conferencia'
+      preLoaderRoute: typeof AuthenticatedConferenciaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/contas': {
+      id: '/_authenticated/contas'
+      path: '/contas'
+      fullPath: '/contas'
+      preLoaderRoute: typeof AuthenticatedContasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/controle-boloes': {
+      id: '/_authenticated/controle-boloes'
+      path: '/controle-boloes'
+      fullPath: '/controle-boloes'
+      preLoaderRoute: typeof AuthenticatedControleBoloesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/criacao-boloes': {
+      id: '/_authenticated/criacao-boloes'
+      path: '/criacao-boloes'
+      fullPath: '/criacao-boloes'
+      preLoaderRoute: typeof AuthenticatedCriacaoBoloesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/estoque': {
+      id: '/_authenticated/estoque'
+      path: '/estoque'
+      fullPath: '/estoque'
+      preLoaderRoute: typeof AuthenticatedEstoqueRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/fechamento': {
       id: '/_authenticated/fechamento'
       path: '/fechamento'
@@ -156,11 +393,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFechamentoRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/importar': {
-      id: '/_authenticated/importar'
-      path: '/importar'
-      fullPath: '/importar'
-      preLoaderRoute: typeof AuthenticatedImportarRouteImport
+    '/_authenticated/fiado-baixas': {
+      id: '/_authenticated/fiado-baixas'
+      path: '/fiado-baixas'
+      fullPath: '/fiado-baixas'
+      preLoaderRoute: typeof AuthenticatedFiadoBaixasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/fiado-clientes': {
+      id: '/_authenticated/fiado-clientes'
+      path: '/fiado-clientes'
+      fullPath: '/fiado-clientes'
+      preLoaderRoute: typeof AuthenticatedFiadoClientesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/fiado-dashboard': {
+      id: '/_authenticated/fiado-dashboard'
+      path: '/fiado-dashboard'
+      fullPath: '/fiado-dashboard'
+      preLoaderRoute: typeof AuthenticatedFiadoDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/fiado-fiados': {
+      id: '/_authenticated/fiado-fiados'
+      path: '/fiado-fiados'
+      fullPath: '/fiado-fiados'
+      preLoaderRoute: typeof AuthenticatedFiadoFiadosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/fiado-novo': {
+      id: '/_authenticated/fiado-novo'
+      path: '/fiado-novo'
+      fullPath: '/fiado-novo'
+      preLoaderRoute: typeof AuthenticatedFiadoNovoRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/inicio': {
+      id: '/_authenticated/inicio'
+      path: '/inicio'
+      fullPath: '/inicio'
+      preLoaderRoute: typeof AuthenticatedInicioRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/lancar': {
+      id: '/_authenticated/lancar'
+      path: '/lancar'
+      fullPath: '/lancar'
+      preLoaderRoute: typeof AuthenticatedLancarRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/meu-caixa': {
+      id: '/_authenticated/meu-caixa'
+      path: '/meu-caixa'
+      fullPath: '/meu-caixa'
+      preLoaderRoute: typeof AuthenticatedMeuCaixaRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/usuarios': {
@@ -168,6 +454,13 @@ declare module '@tanstack/react-router' {
       path: '/usuarios'
       fullPath: '/usuarios'
       preLoaderRoute: typeof AuthenticatedUsuariosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/vendas-boloes': {
+      id: '/_authenticated/vendas-boloes'
+      path: '/vendas-boloes'
+      fullPath: '/vendas-boloes'
+      preLoaderRoute: typeof AuthenticatedVendasBoloesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/fechamentos/': {
@@ -188,17 +481,47 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedCaixasRoute: typeof AuthenticatedCaixasRoute
+  AuthenticatedConferenciaRoute: typeof AuthenticatedConferenciaRoute
+  AuthenticatedContasRoute: typeof AuthenticatedContasRoute
+  AuthenticatedControleBoloesRoute: typeof AuthenticatedControleBoloesRoute
+  AuthenticatedCriacaoBoloesRoute: typeof AuthenticatedCriacaoBoloesRoute
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedEstoqueRoute: typeof AuthenticatedEstoqueRoute
   AuthenticatedFechamentoRoute: typeof AuthenticatedFechamentoRoute
-  AuthenticatedImportarRoute: typeof AuthenticatedImportarRoute
+  AuthenticatedFiadoBaixasRoute: typeof AuthenticatedFiadoBaixasRoute
+  AuthenticatedFiadoClientesRoute: typeof AuthenticatedFiadoClientesRoute
+  AuthenticatedFiadoDashboardRoute: typeof AuthenticatedFiadoDashboardRoute
+  AuthenticatedFiadoFiadosRoute: typeof AuthenticatedFiadoFiadosRoute
+  AuthenticatedFiadoNovoRoute: typeof AuthenticatedFiadoNovoRoute
+  AuthenticatedInicioRoute: typeof AuthenticatedInicioRoute
+  AuthenticatedLancarRoute: typeof AuthenticatedLancarRoute
+  AuthenticatedMeuCaixaRoute: typeof AuthenticatedMeuCaixaRoute
   AuthenticatedUsuariosRoute: typeof AuthenticatedUsuariosRoute
+  AuthenticatedVendasBoloesRoute: typeof AuthenticatedVendasBoloesRoute
   AuthenticatedFechamentosIdRoute: typeof AuthenticatedFechamentosIdRoute
   AuthenticatedFechamentosIndexRoute: typeof AuthenticatedFechamentosIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedCaixasRoute: AuthenticatedCaixasRoute,
+  AuthenticatedConferenciaRoute: AuthenticatedConferenciaRoute,
+  AuthenticatedContasRoute: AuthenticatedContasRoute,
+  AuthenticatedControleBoloesRoute: AuthenticatedControleBoloesRoute,
+  AuthenticatedCriacaoBoloesRoute: AuthenticatedCriacaoBoloesRoute,
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedEstoqueRoute: AuthenticatedEstoqueRoute,
   AuthenticatedFechamentoRoute: AuthenticatedFechamentoRoute,
-  AuthenticatedImportarRoute: AuthenticatedImportarRoute,
+  AuthenticatedFiadoBaixasRoute: AuthenticatedFiadoBaixasRoute,
+  AuthenticatedFiadoClientesRoute: AuthenticatedFiadoClientesRoute,
+  AuthenticatedFiadoDashboardRoute: AuthenticatedFiadoDashboardRoute,
+  AuthenticatedFiadoFiadosRoute: AuthenticatedFiadoFiadosRoute,
+  AuthenticatedFiadoNovoRoute: AuthenticatedFiadoNovoRoute,
+  AuthenticatedInicioRoute: AuthenticatedInicioRoute,
+  AuthenticatedLancarRoute: AuthenticatedLancarRoute,
+  AuthenticatedMeuCaixaRoute: AuthenticatedMeuCaixaRoute,
   AuthenticatedUsuariosRoute: AuthenticatedUsuariosRoute,
+  AuthenticatedVendasBoloesRoute: AuthenticatedVendasBoloesRoute,
   AuthenticatedFechamentosIdRoute: AuthenticatedFechamentosIdRoute,
   AuthenticatedFechamentosIndexRoute: AuthenticatedFechamentosIndexRoute,
 }

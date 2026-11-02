@@ -34,4 +34,11 @@ dist-ssr
 # Deploy VPN
 .env.production
 deploy/certbot/
+
+# Segredos locais (nunca versionar)
 .env
+.env.*
+!.env.example
+!.env.production.example
+deploy_vps.py
+deploy/nginx/*.bak

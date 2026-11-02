@@ -1,17 +1,34 @@
 import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
+import { describeError } from "./lib/error-capture";
 import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
+
+/** Cliente desconectou (recarregou/cancelou): não é um erro da aplicação. */
+export function isAbortError(error: unknown): boolean {
+  return (
+    error != null &&
+    typeof error === "object" &&
+    ((error as { name?: string }).name === "AbortError" ||
+      (error as { code?: string }).code === "ABORT_ERR")
+  );
+}
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
     return await next();
   } catch (error) {
     if (error != null && typeof error === "object" && "statusCode" in error) {
+      // Registra o erro ORIGINAL (com stack real) antes do h3 trocá-lo pela casca
+      // HTTPError sem detalhes — server.ts recupera de lá para a página de erro.
+      console.error(error);
       throw error;
     }
+    if (isAbortError(error)) {
+      return new Response(null, { status: 499 });
+    }
     console.error(error);
-    return new Response(renderErrorPage(), {
+    return new Response(renderErrorPage(describeError(error)), {
       status: 500,
       headers: { "content-type": "text/html; charset=utf-8" },
     });

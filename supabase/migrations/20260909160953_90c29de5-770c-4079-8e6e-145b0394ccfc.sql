@@ -1,0 +1,1 @@
+ALTER TABLE public.caixas_exclusoes ALTER COLUMN caixa_id DROP NOT NULL;

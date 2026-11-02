@@ -1,4 +1,8 @@
-export function renderErrorPage(): string {
+export function renderErrorPage(details?: string): string {
+  const bloco =
+    details && details.trim()
+      ? `<pre class="detalhes">${escapeHtml(details).slice(0, 12000)}</pre>`
+      : "";
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -14,6 +18,7 @@ export function renderErrorPage(): string {
       a, button { padding: 0.5rem 1rem; border-radius: 0.375rem; font: inherit; cursor: pointer; text-decoration: none; border: 1px solid transparent; }
       .primary { background: #111; color: #fff; }
       .secondary { background: #fff; color: #111; border-color: #d1d5db; }
+      .detalhes { text-align: left; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 0.75rem; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; color: #374151; white-space: pre-wrap; word-break: break-word; max-height: 18rem; overflow: auto; margin: 1.25rem 0 0; }
     </style>
   </head>
   <body>
@@ -24,7 +29,12 @@ export function renderErrorPage(): string {
         <button class="primary" onclick="location.reload()">Try again</button>
         <a class="secondary" href="/">Go home</a>
       </div>
+      ${bloco}
     </div>
   </body>
 </html>`;
+}
+
+function escapeHtml(texto: string): string {
+  return texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
