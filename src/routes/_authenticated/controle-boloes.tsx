@@ -19,7 +19,7 @@ import {
 import { controleBoloes } from "@/lib/controle-boloes.functions";
 import { listarEstoqueBoloes } from "@/lib/boloes.functions";
 import { buscarProximoConcurso } from "@/lib/caixa-loterias.functions";
-import { listarBoloesRadarlot, type BolaoRadarlot } from "@/lib/radarlot.functions";
+import { listarBoloesRadarlot, sincronizarRadarlotManual, type BolaoRadarlot } from "@/lib/radarlot.functions";
 import {
   ajustarCotasEstoque,
   criarEstoque,
@@ -209,6 +209,23 @@ function ControleBoloes() {
       `${b.modalidadeNome} ${b.concurso} ${b.codigo} ${b.loterica}`.toLowerCase().includes(t),
     );
   }, [radarQ.data, radarBusca]);
+
+  const syncRadarlotFn = useServerFn(sincronizarRadarlotManual);
+  const syncRadarlotMut = useMutation({
+    mutationFn: () => syncRadarlotFn({ data: {} }),
+    onSuccess: (r) => {
+      if (r.ok) {
+        setAviso({
+          tipo: "ok",
+          texto: `${r.importados} bolão(ões) novo(s) importado(s) do RadarLot.`,
+        });
+        void qc.invalidateQueries({ queryKey: ["controle-boloes"] });
+      } else {
+        setAviso({ tipo: "erro", texto: r.erro });
+      }
+    },
+    onError: (e) => setAviso({ tipo: "erro", texto: e.message }),
+  });
 
   const relatorioQ = useQuery({
     queryKey: ["relatorio-vendas-boloes", de, ate, filtroOperador],
@@ -579,16 +596,26 @@ function ControleBoloes() {
             </p>
           </div>
           {admin && (
-            <button
-              type="button"
-              onClick={() => {
-                setRadarOrigem(null);
-                setNovoAberto(true);
-              }}
-              className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              Novo bolão
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={syncRadarlotMut.isPending}
+                onClick={() => syncRadarlotMut.mutate()}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
+              >
+                {syncRadarlotMut.isPending ? "Sincronizando…" : "Sincronizar RadarLot"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRadarOrigem(null);
+                  setNovoAberto(true);
+                }}
+                className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Novo bolão
+              </button>
+            </div>
           )}
         </header>
 

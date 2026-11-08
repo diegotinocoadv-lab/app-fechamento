@@ -235,6 +235,54 @@ function doCache<T>(chave: string, ttl: number): T | null {
 
 const alvo = z.object({ forcar: z.boolean().optional().default(false) });
 
+/**
+ * Carrega os bolões do RadarLot (somente leitura), sem verificação de admin
+ * nem cache de UI. Usado tanto pelo server fn quanto pela sincronização
+ * automática em segundo plano.
+ */
+export async function carregarBoloesRadarlot(
+  forcar = false,
+): Promise<{ ok: true; boloes: BolaoRadarlot[] } | { ok: false; erro: string }> {
+  const chaveCache = "boloes:proximos";
+  if (!forcar) {
+    const hit = doCache<BolaoRadarlot[]>(chaveCache, TTL_LISTA);
+    if (hit) return { ok: true, boloes: hit };
+  }
+
+  const lotericas = await radarGet<LotericaRadar[]>("/lotericas");
+  if (!lotericas.ok) return lotericas;
+
+  const casas = Array.isArray(lotericas.dados)
+    ? lotericas.dados.filter((l) => l && Number.isFinite(Number(l.id)))
+    : [];
+  if (casas.length === 0) {
+    return { ok: false, erro: "Nenhuma lotérica apareceu na conta do RadarLot." };
+  }
+
+  // A conta pode acompanhar mais de uma casa; 8 é o teto para não gastar o
+  // limite de chamadas da API (2 recargas por segundo).
+  const respostas = await Promise.all(
+    casas.slice(0, 8).map(async (loterica) => {
+      const r = await radarGet<ListaRadar>(`/lotericas/${loterica.id}/boloes?modo=proximos`);
+      return { loterica, r };
+    }),
+  );
+
+  const ok: { loterica: LotericaRadar; lista: ListaRadar }[] = [];
+  let primeiroErro = "";
+  for (const { loterica, r } of respostas) {
+    if (r.ok) ok.push({ loterica, lista: r.dados ?? {} });
+    else primeiroErro ||= r.erro;
+  }
+  if (ok.length === 0) {
+    return { ok: false, erro: primeiroErro || "O RadarLot não devolveu nenhum bolão." };
+  }
+
+  const boloes = montarBoloesRadarlot(ok);
+  cache.set(chaveCache, { em: Date.now(), dados: boloes });
+  return { ok: true, boloes };
+}
+
 /** Bolões à venda no RadarLot, prontos para importar no cadastro. */
 export const listarBoloesRadarlot = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -243,43 +291,26 @@ export const listarBoloesRadarlot = createServerFn({ method: "POST" })
     if (!(await ehAdmin(context))) {
       return { ok: false, erro: "Apenas administradores podem importar bolões do RadarLot." };
     }
+    const r = await carregarBoloesRadarlot(data.forcar);
+    if (!r.ok) return r;
+    return { ok: true, boloes: r.boloes, consultadoEm: new Date().toISOString() };
+  });
 
-    const chaveCache = "boloes:proximos";
-    if (!data.forcar) {
-      const hit = doCache<BolaoRadarlot[]>(chaveCache, TTL_LISTA);
-      if (hit) return { ok: true, boloes: hit, consultadoEm: new Date().toISOString() };
+const alvoManual = z.object({});
+
+/** Dispara a sincronização manual (admin) e devolve quantos bolões novos entraram. */
+export const sincronizarRadarlotManual = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => alvoManual.parse(input ?? {}))
+  .handler(async ({ context }): Promise<{ ok: true; importados: number } | { ok: false; erro: string }> => {
+    if (!(await ehAdmin(context))) {
+      return { ok: false, erro: "Apenas administradores podem sincronizar o RadarLot." };
     }
-
-    const lotericas = await radarGet<LotericaRadar[]>("/lotericas");
-    if (!lotericas.ok) return lotericas;
-
-    const casas = Array.isArray(lotericas.dados)
-      ? lotericas.dados.filter((l) => l && Number.isFinite(Number(l.id)))
-      : [];
-    if (casas.length === 0) {
-      return { ok: false, erro: "Nenhuma lotérica apareceu na conta do RadarLot." };
+    const { sincronizarRadarlotAutomatico } = await import("@/lib/radarlot-sync.server");
+    try {
+      const n = await sincronizarRadarlotAutomatico();
+      return { ok: true, importados: n };
+    } catch (e) {
+      return { ok: false, erro: e instanceof Error ? e.message : "Falha na sincronização." };
     }
-
-    // A conta pode acompanhar mais de uma casa; 8 é o teto para não gastar o
-    // limite de chamadas da API (2 recargas por segundo).
-    const respostas = await Promise.all(
-      casas.slice(0, 8).map(async (loterica) => {
-        const r = await radarGet<ListaRadar>(`/lotericas/${loterica.id}/boloes?modo=proximos`);
-        return { loterica, r };
-      }),
-    );
-
-    const ok: { loterica: LotericaRadar; lista: ListaRadar }[] = [];
-    let primeiroErro = "";
-    for (const { loterica, r } of respostas) {
-      if (r.ok) ok.push({ loterica, lista: r.dados ?? {} });
-      else primeiroErro ||= r.erro;
-    }
-    if (ok.length === 0) {
-      return { ok: false, erro: primeiroErro || "O RadarLot não devolveu nenhum bolão." };
-    }
-
-    const boloes = montarBoloesRadarlot(ok);
-    cache.set(chaveCache, { em: Date.now(), dados: boloes });
-    return { ok: true, boloes, consultadoEm: new Date().toISOString() };
   });

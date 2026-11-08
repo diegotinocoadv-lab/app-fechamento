@@ -1,11 +1,14 @@
 import "./lib/error-capture";
 
 import { iniciarAutoEncerrar } from "./lib/auto-encerrar.server";
+import { iniciarSyncRadarlot } from "./lib/radarlot-sync.server";
 import { consumeLastCapturedError, describeError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
 // Encerra sozinho, no servidor, os lotes de estoque com sorteio já passado.
 iniciarAutoEncerrar();
+// Importa bolões do RadarLot para o estoque, para os operadores lançarem.
+iniciarSyncRadarlot();
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
