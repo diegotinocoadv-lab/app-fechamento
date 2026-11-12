@@ -321,10 +321,16 @@ export const salvarFechamento = createServerFn({ method: "POST" })
         (caixaNumero ? undefined : existentes?.[0]);
 
       if (alvo) {
+        // Atualiza o vínculo com o fechamento mesmo se o caixa já estiver
+        // conferido (admin corrigindo), mas não reabre o caixa conferido.
+        await supabaseAdmin
+          .from("caixas")
+          .update({ fechamento_id: insert.data.id })
+          .eq("id", alvo.id);
         if (alvo.situacao !== "conferido") {
           await supabaseAdmin
             .from("caixas")
-            .update({ situacao: "fechado", fechamento_id: insert.data.id })
+            .update({ situacao: "fechado" })
             .eq("id", alvo.id);
         }
       } else {

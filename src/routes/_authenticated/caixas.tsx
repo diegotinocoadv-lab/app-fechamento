@@ -372,10 +372,12 @@ function Caixas() {
                                 situacao: e.target.value as "aberto" | "fechado" | "conferido",
                               })
                             }
-                            className={input}
+                            disabled={edicao.situacao === "conferido"}
+                            className={`${input} w-full disabled:opacity-60`}
                           >
                             <option value="aberto">Aberto</option>
                             <option value="fechado">Fechado</option>
+                            <option value="conferido">Conferido</option>
                           </select>
                         </td>
                         <td className="py-2 text-right">
@@ -458,7 +460,7 @@ function Caixas() {
                                 )}
                               </button>
                             )}
-                            {admin && c.fechamentoId && c.situacao !== "conferido" && (
+                            {admin && c.fechamentoId && (
                               <Link
                                 to="/fechamento"
                                 search={{ fechamentoId: c.fechamentoId }}
@@ -492,7 +494,7 @@ function Caixas() {
                                 )}
                               </button>
                             )}
-                            {admin && c.situacao !== "conferido" && (
+                            {admin && (
                               <>
                                 <button
                                   onClick={() => {
@@ -503,14 +505,14 @@ function Caixas() {
                                       operadorId: c.operadorId ?? "",
                                       data: c.data,
                                       observacoes: c.observacoes,
-                                      situacao:
-                                        c.situacao === "fechado" ? "fechado" : "aberto",
+                                      situacao: c.situacao as "aberto" | "fechado" | "conferido",
                                     });
                                   }}
                                   className="h-8 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground hover:bg-accent"
                                 >
                                   <Edit2 className="h-3 w-3" />
                                 </button>
+{admin && c.situacao !== "conferido" && (
                                 <button
                                   onClick={() => {
                                     setErro("");
@@ -524,6 +526,7 @@ function Caixas() {
                                 >
                                   <Trash2 className="h-3 w-3" />
                                 </button>
+                              )}
 
                               </>
                             )}
