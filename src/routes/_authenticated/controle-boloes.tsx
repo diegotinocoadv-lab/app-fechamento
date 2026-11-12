@@ -371,7 +371,7 @@ function ControleBoloes() {
     setNovoNome(mod?.nome ?? b.modalidadeNome);
     setNovoConcurso(b.concurso);
     setNovoData(b.dataSorteio || proximaDataSorteioISO(mod, hojeSp()));
-    setNovoValor(b.valorSemTarifa > 0 ? String(b.valorSemTarifa).replace(".", ",") : "");
+    setNovoValor(b.valorComTarifa > 0 ? String(b.valorComTarifa).replace(".", ",") : "");
     setNovoTaxa(b.taxa > 0 ? String(b.taxa).replace(".", ",") : "");
     setNovoCotas(b.totalCotas > 0 ? String(b.totalCotas) : "");
     setNovoObs(`RadarLot ${b.codigo}${b.nomeEspecial ? ` · ${b.nomeEspecial}` : ""}`);
@@ -1101,7 +1101,9 @@ function ControleBoloes() {
                 Importado do RadarLot (código …{radarOrigem.codigo.slice(-6)}). O bolão tem{" "}
                 {radarOrigem.totalCotas} cota(s) e lá restam {radarOrigem.cotasDisponiveis}. Entram
                 as {radarOrigem.totalCotas} no seu estoque; as vendas feitas aqui passam a ser
-                contadas neste sistema.
+                contadas neste sistema. Valor da cota: R${" "}
+                {radarOrigem.valorComTarifa.toFixed(2).replace(".", ",")} (taxa R${" "}
+                {radarOrigem.taxa.toFixed(2).replace(".", ",")}).
               </p>
             )}
             <label className="mt-3 block text-xs text-muted-foreground">

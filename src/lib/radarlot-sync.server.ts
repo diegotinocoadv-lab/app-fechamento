@@ -49,7 +49,7 @@ export async function sincronizarRadarlotAutomatico(): Promise<number> {
       nome: b.modalidadeNome,
       concurso: b.concurso || "",
       cotas: b.totalCotas,
-      valor_cota: b.valorSemTarifa,
+      valor_cota: b.valorComTarifa > 0 ? b.valorComTarifa : b.valorSemTarifa,
       taxa: b.taxa,
       data: b.dataSorteio,
       situacao: "ativo",
